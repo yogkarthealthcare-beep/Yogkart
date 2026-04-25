@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "paytmchecksum": "^1.5.1",
+    "postgres": "^3.4.9",
+    "razorpay": "^2.9.6"
+  }
+}
