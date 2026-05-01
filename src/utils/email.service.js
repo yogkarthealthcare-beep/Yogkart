@@ -21,14 +21,22 @@
 const nodemailer = require('nodemailer');
 
 // ── Transporter ───────────────────────────────────────────────────────────────
+//const transporter = nodemailer.createTransport({
+  //service: 'gmail',
+  //auth: {
+   // user: process.env.MAIL_USER || 'yogkarthealthcare@gmail.com',
+   // pass: process.env.MAIL_PASS || 'rgeqxlrigypxkkuc',  // .env mein set karo — hardcode mat karo
+ // },
+//});
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.MAIL_USER || 'yogkarthealthcare@gmail.com',
-    pass: process.env.MAIL_PASS,  // .env mein set karo — hardcode mat karo
+    pass: process.env.MAIL_PASS || 'rgeqxlrigypxkkuc',
   },
 });
-
 // ── Verify connection on startup (silent) ─────────────────────────────────────
 transporter.verify((err) => {
   if (err) console.error('📧 Mailer config error:', err.message);
