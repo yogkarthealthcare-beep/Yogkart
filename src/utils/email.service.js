@@ -1,47 +1,20 @@
 /**
  * ============================================================
  * EmailService — Yogkart Healthcare
- * Sender : yogkarthealthcare@gmail.com
+ * Provider : Resend API (Render compatible)
  * ============================================================
- *
- * Types supported:
- *  otp                — OTP verification email
- *  welcome            — New user welcome
- *  order_confirmation — Order placed
- *  order_shipped      — Order dispatched
- *  order_delivered    — Order delivered
- *  password_reset     — Forgot password OTP
- *  password_changed   — Password change alert
- *
- * Usage:
- *   const { sendEmail } = require('./email.service');
- *   await sendEmail({ type: 'otp', to: 'user@example.com', data: { otp: '482910', name: 'Ravi' } });
  */
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// ── Transporter ───────────────────────────────────────────────────────────────
-//const transporter = nodemailer.createTransport({
-  //service: 'gmail',
-  //auth: {
-   // user: process.env.MAIL_USER || 'yogkarthealthcare@gmail.com',
-   // pass: process.env.MAIL_PASS || 'rgeqxlrigypxkkuc',  // .env mein set karo — hardcode mat karo
- // },
-//});
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.MAIL_USER || 'yogkarthealthcare@gmail.com',
-    pass: process.env.MAIL_PASS || 'rgeqxlrigypxkkuc',
-  },
-});
-// ── Verify connection on startup (silent) ─────────────────────────────────────
-transporter.verify((err) => {
-  if (err) console.error('📧 Mailer config error:', err.message);
-  else     console.log('📧 Mailer ready — yogkarthealthcare@gmail.com');
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Startup check
+if (!process.env.RESEND_API_KEY) {
+  console.error('📧 Mailer config error: RESEND_API_KEY not set in environment');
+} else {
+  console.log('📧 Mailer ready — yogkarthealthcare@gmail.com (via Resend)');
+}
 
 // ── Brand colours ─────────────────────────────────────────────────────────────
 const TEAL   = '#0d9488';
@@ -63,20 +36,17 @@ const layout = (bodyHtml) => `
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0"
              style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:100%;">
-        <!-- HEADER -->
         <tr>
           <td style="background:${TEAL};padding:28px 40px;text-align:center;">
             <h1 style="margin:0;color:#ffffff;font-size:22px;letter-spacing:1px;">🌿 Yogkart Healthcare</h1>
             <p  style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">Wellness · Ayurveda · Nutrition</p>
           </td>
         </tr>
-        <!-- BODY -->
         <tr>
           <td style="padding:36px 40px;color:${DARK};font-size:15px;line-height:1.7;">
             ${bodyHtml}
           </td>
         </tr>
-        <!-- FOOTER -->
         <tr>
           <td style="background:${LIGHT};border-top:1px solid ${BORDER};padding:20px 40px;text-align:center;color:#64748b;font-size:12px;">
             <p style="margin:0;">© ${new Date().getFullYear()} Yogkart Healthcare Private Limited</p>
@@ -125,7 +95,6 @@ const orderItemsTable = (items = []) => {
 // ── Template map ──────────────────────────────────────────────────────────────
 const TEMPLATES = {
 
-  // ── 1. OTP — Email Verification ──────────────────────────────────────────
   otp: ({ name = 'User', otp }) => ({
     subject: `${otp} — Your Yogkart Verification Code`,
     html: layout(`
@@ -136,7 +105,6 @@ const TEMPLATES = {
     `),
   }),
 
-  // ── 2. Password Reset OTP ────────────────────────────────────────────────
   password_reset: ({ name = 'User', otp }) => ({
     subject: `${otp} — Yogkart Password Reset OTP`,
     html: layout(`
@@ -147,7 +115,6 @@ const TEMPLATES = {
     `),
   }),
 
-  // ── 3. Welcome ───────────────────────────────────────────────────────────
   welcome: ({ name = 'User' }) => ({
     subject: `Welcome to Yogkart Healthcare, ${name}! 🌿`,
     html: layout(`
@@ -167,21 +134,14 @@ const TEMPLATES = {
     `),
   }),
 
-  // ── 4. Order Confirmation ────────────────────────────────────────────────
   order_confirmation: ({ name = 'User', orderId, items = [], total, address = '' }) => ({
     subject: `Order Confirmed #${orderId} — Yogkart Healthcare`,
     html: layout(`
       <p>Hello <strong>${name}</strong>,</p>
       <p>🎉 Your order has been placed successfully!</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;background:${LIGHT};border-radius:8px;padding:16px;">
-        <tr>
-          <td><strong>Order ID:</strong></td>
-          <td style="color:${TEAL};font-weight:700;">#${orderId}</td>
-        </tr>
-        <tr>
-          <td><strong>Date:</strong></td>
-          <td>${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' })}</td>
-        </tr>
+        <tr><td><strong>Order ID:</strong></td><td style="color:${TEAL};font-weight:700;">#${orderId}</td></tr>
+        <tr><td><strong>Date:</strong></td><td>${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' })}</td></tr>
         ${address ? `<tr><td style="vertical-align:top;padding-top:4px;"><strong>Deliver to:</strong></td><td>${address}</td></tr>` : ''}
       </table>
       ${items.length ? orderItemsTable(items) : ''}
@@ -192,7 +152,6 @@ const TEMPLATES = {
     `),
   }),
 
-  // ── 5. Order Shipped ─────────────────────────────────────────────────────
   order_shipped: ({ name = 'User', orderId, trackingId = '', courier = '', estimatedDate = '' }) => ({
     subject: `Your Order #${orderId} Has Been Shipped 🚚`,
     html: layout(`
@@ -200,14 +159,13 @@ const TEMPLATES = {
       <p>Great news! Your order <strong>#${orderId}</strong> is on its way.</p>
       <table width="100%" cellpadding="0" cellspacing="0"
              style="margin:16px 0;background:${LIGHT};border-radius:8px;padding:16px;font-size:14px;">
-        ${trackingId  ? `<tr><td><strong>Tracking ID:</strong></td><td style="color:${TEAL};">${trackingId}</td></tr>` : ''}
-        ${courier     ? `<tr><td><strong>Courier:</strong></td><td>${courier}</td></tr>` : ''}
+        ${trackingId   ? `<tr><td><strong>Tracking ID:</strong></td><td style="color:${TEAL};">${trackingId}</td></tr>` : ''}
+        ${courier      ? `<tr><td><strong>Courier:</strong></td><td>${courier}</td></tr>` : ''}
         ${estimatedDate ? `<tr><td><strong>Estimated Delivery:</strong></td><td>${estimatedDate}</td></tr>` : ''}
       </table>
     `),
   }),
 
-  // ── 6. Order Delivered ───────────────────────────────────────────────────
   order_delivered: ({ name = 'User', orderId }) => ({
     subject: `Order #${orderId} Delivered! Please Rate Your Experience ⭐`,
     html: layout(`
@@ -223,7 +181,6 @@ const TEMPLATES = {
     `),
   }),
 
-  // ── 7. Password Changed Alert ────────────────────────────────────────────
   password_changed: ({ name = 'User' }) => ({
     subject: `Your Yogkart Password Was Changed`,
     html: layout(`
@@ -238,28 +195,23 @@ const TEMPLATES = {
 };
 
 // ── Main send function ────────────────────────────────────────────────────────
-/**
- * @param {Object} params
- * @param {'otp'|'password_reset'|'welcome'|'order_confirmation'|'order_shipped'|'order_delivered'|'password_changed'} params.type
- * @param {string}  params.to    — recipient email
- * @param {Object}  params.data  — template-specific data
- * @returns {Promise<{ messageId: string }>}
- */
 const sendEmail = async ({ type, to, data = {} }) => {
   const templateFn = TEMPLATES[type];
   if (!templateFn) throw new Error(`Unknown email type: "${type}". Valid: ${Object.keys(TEMPLATES).join(', ')}`);
 
   const { subject, html } = templateFn(data);
 
-  const info = await transporter.sendMail({
-    from: `"Yogkart Healthcare" <${process.env.MAIL_USER || 'yogkarthealthcare@gmail.com'}>`,
+  const { data: result, error } = await resend.emails.send({
+    from: 'Yogkart Healthcare <onboarding@resend.dev>',
     to,
     subject,
     html,
   });
 
-  console.log(`📧 [${type}] sent to ${to} — msgId: ${info.messageId}`);
-  return { messageId: info.messageId };
+  if (error) throw new Error(error.message);
+
+  console.log(`📧 [${type}] sent to ${to} — msgId: ${result.id}`);
+  return { messageId: result.id };
 };
 
 module.exports = { sendEmail, TEMPLATES };
