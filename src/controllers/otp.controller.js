@@ -4,6 +4,8 @@
  * ============================================================
  * POST /api/auth/send-otp     — OTP send karo (any type)
  * POST /api/auth/verify-otp   — OTP verify karo
+ * POST /api/auth/reset-password — Password reset karo
+ * POST /api/email/send        — Admin: any email type
  * ============================================================
  */
 
@@ -60,16 +62,11 @@ const sendOtp = async (req, res) => {
   } catch (err) {
     console.error('sendOtp error:', err);
     return error(res, 'Failed to send OTP. Please try again.');
-    error: error.message  // ← ye add karo
   }
 };
 
 // ── POST /api/auth/verify-otp ─────────────────────────────────────────────────
 // Body: { email, otp, purpose: 'login' | 'password_reset' | 'email_verify' }
-//
-// purpose = 'login'          → verify + return auth tokens (passwordless login)
-// purpose = 'email_verify'   → verify only, mark is_verified = true
-// purpose = 'password_reset' → verify only, return short-lived reset_token flag
 //
 const verifyOtpHandler = async (req, res) => {
   try {
@@ -91,10 +88,8 @@ const verifyOtpHandler = async (req, res) => {
 
     // ── purpose: password_reset ────────────────────────────────────────────
     if (purpose === 'password_reset') {
-      // Return a flag — frontend will send new password to /api/auth/reset-password
-      // (Stateless: store reset permission in OTP store for 5 min)
-      const { saveOtp } = require('../utils/otp.store');
-      saveOtp(`reset_${email}`, 'GRANTED'); // tiny 10-min window
+      // ✅ FIX: await lagao saveOtp pe — warna grant save nahi hoga
+      await saveOtp(`reset_${email.toLowerCase().trim()}`, 'GRANTED');
       return success(res, { resetGranted: true }, 'OTP verified. You may now reset your password.');
     }
 
@@ -119,10 +114,10 @@ const verifyOtpHandler = async (req, res) => {
       refreshToken,
     }, 'OTP verified. Login successful.');
 
- } catch (err) {
-  console.error('verifyOtp error:', err.message, err.stack);
-  return error(res, err.message || 'OTP verification failed.');
-}
+  } catch (err) {
+    console.error('verifyOtp error:', err.message, err.stack);
+    return error(res, err.message || 'OTP verification failed.');
+  }
 };
 
 // ── POST /api/auth/reset-password ─────────────────────────────────────────────
@@ -134,9 +129,8 @@ const resetPassword = async (req, res) => {
     if (!email || !newPassword) return badRequest(res, 'Email and newPassword required');
     if (newPassword.length < 6)  return badRequest(res, 'Password must be at least 6 characters');
 
-    // Check grant token
-    const { verifyOtp: checkGrant } = require('../utils/otp.store');
-    const grant = checkGrant(`reset_${email}`, 'GRANTED');
+    // ✅ FIX: await lagao — verifyOtp async hai
+    const grant = await verifyOtp(`reset_${email.toLowerCase().trim()}`, 'GRANTED');
     if (!grant.valid) return badRequest(res, 'Reset session expired. Please request OTP again.');
 
     const bcrypt = require('bcryptjs');
