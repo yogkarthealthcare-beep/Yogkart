@@ -1,19 +1,29 @@
 /**
  * ============================================================
  * EmailService — Yogkart Healthcare
- * Provider : Resend API (Render compatible)
+ * Provider : Brevo API (No domain verification needed)
+ * Free Plan: 300 emails/day
  * ============================================================
+ *
+ * Types supported:
+ *  otp                — OTP verification email
+ *  welcome            — New user welcome
+ *  order_confirmation — Order placed
+ *  order_shipped      — Order dispatched
+ *  order_delivered    — Order delivered
+ *  password_reset     — Forgot password OTP
+ *  password_changed   — Password change alert
+ *
+ * Usage:
+ *   const { sendEmail } = require('./email.service');
+ *   await sendEmail({ type: 'otp', to: 'user@example.com', data: { otp: '482910', name: 'Ravi' } });
  */
 
-const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-// Startup check
-if (!process.env.RESEND_API_KEY) {
-  console.error('📧 Mailer config error: RESEND_API_KEY not set in environment');
+// ── Startup check ─────────────────────────────────────────────────────────────
+if (!process.env.BREVO_API_KEY) {
+  console.error('📧 Mailer config error: BREVO_API_KEY not set in environment');
 } else {
-  console.log('📧 Mailer ready — yogkarthealthcare@gmail.com (via Resend)');
+  console.log('📧 Mailer ready — Brevo API (yogkarthealthcare@gmail.com)');
 }
 
 // ── Brand colours ─────────────────────────────────────────────────────────────
@@ -36,17 +46,20 @@ const layout = (bodyHtml) => `
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0"
              style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:100%;">
+        <!-- HEADER -->
         <tr>
           <td style="background:${TEAL};padding:28px 40px;text-align:center;">
             <h1 style="margin:0;color:#ffffff;font-size:22px;letter-spacing:1px;">🌿 Yogkart Healthcare</h1>
             <p  style="margin:4px 0 0;color:#ccfbf1;font-size:13px;">Wellness · Ayurveda · Nutrition</p>
           </td>
         </tr>
+        <!-- BODY -->
         <tr>
           <td style="padding:36px 40px;color:${DARK};font-size:15px;line-height:1.7;">
             ${bodyHtml}
           </td>
         </tr>
+        <!-- FOOTER -->
         <tr>
           <td style="background:${LIGHT};border-top:1px solid ${BORDER};padding:20px 40px;text-align:center;color:#64748b;font-size:12px;">
             <p style="margin:0;">© ${new Date().getFullYear()} Yogkart Healthcare Private Limited</p>
@@ -75,7 +88,7 @@ const orderItemsTable = (items = []) => {
     <tr>
       <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;">${i.name}</td>
       <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;text-align:center;">${i.qty}</td>
-      <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;text-align:right;">₹${Number(i.price).toLocaleString('en-IN')}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;text-align:right;">&#8377;${Number(i.price).toLocaleString('en-IN')}</td>
     </tr>`).join('');
 
   return `
@@ -95,6 +108,7 @@ const orderItemsTable = (items = []) => {
 // ── Template map ──────────────────────────────────────────────────────────────
 const TEMPLATES = {
 
+  // ── 1. OTP — Email Verification ──────────────────────────────────────────
   otp: ({ name = 'User', otp }) => ({
     subject: `${otp} — Your Yogkart Verification Code`,
     html: layout(`
@@ -105,53 +119,63 @@ const TEMPLATES = {
     `),
   }),
 
+  // ── 2. Password Reset OTP ────────────────────────────────────────────────
   password_reset: ({ name = 'User', otp }) => ({
     subject: `${otp} — Yogkart Password Reset OTP`,
     html: layout(`
       <p>Hello <strong>${name}</strong>,</p>
       <p>We received a request to reset your password. Use the OTP below:</p>
       ${otpBox(otp)}
-      <p style="color:#ef4444;font-size:13px;">⚠️ If this was not you, secure your account immediately.</p>
+      <p style="color:#ef4444;font-size:13px;">&#9888;&#65039; If this was not you, secure your account immediately.</p>
     `),
   }),
 
+  // ── 3. Welcome ───────────────────────────────────────────────────────────
   welcome: ({ name = 'User' }) => ({
     subject: `Welcome to Yogkart Healthcare, ${name}! 🌿`,
     html: layout(`
       <p>Namaste <strong>${name}</strong>! 🙏</p>
       <p>Welcome to <strong>Yogkart Healthcare</strong> — your destination for authentic Ayurvedic wellness products.</p>
       <ul style="padding-left:20px;color:#475569;">
-        <li>Browse 500+ Ayurvedic & wellness products</li>
-        <li>100% natural & certified ingredients</li>
+        <li>Browse 500+ Ayurvedic &amp; wellness products</li>
+        <li>100% natural &amp; certified ingredients</li>
         <li>Fast delivery across India</li>
       </ul>
       <div style="text-align:center;margin:28px 0;">
         <a href="${process.env.FRONTEND_URL || 'http://localhost:4200'}"
            style="background:${TEAL};color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:600;">
-          Start Shopping →
+          Start Shopping &#8594;
         </a>
       </div>
     `),
   }),
 
+  // ── 4. Order Confirmation ────────────────────────────────────────────────
   order_confirmation: ({ name = 'User', orderId, items = [], total, address = '' }) => ({
     subject: `Order Confirmed #${orderId} — Yogkart Healthcare`,
     html: layout(`
       <p>Hello <strong>${name}</strong>,</p>
-      <p>🎉 Your order has been placed successfully!</p>
+      <p>&#127881; Your order has been placed successfully!</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;background:${LIGHT};border-radius:8px;padding:16px;">
-        <tr><td><strong>Order ID:</strong></td><td style="color:${TEAL};font-weight:700;">#${orderId}</td></tr>
-        <tr><td><strong>Date:</strong></td><td>${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' })}</td></tr>
+        <tr>
+          <td><strong>Order ID:</strong></td>
+          <td style="color:${TEAL};font-weight:700;">#${orderId}</td>
+        </tr>
+        <tr>
+          <td><strong>Date:</strong></td>
+          <td>${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' })}</td>
+        </tr>
         ${address ? `<tr><td style="vertical-align:top;padding-top:4px;"><strong>Deliver to:</strong></td><td>${address}</td></tr>` : ''}
       </table>
       ${items.length ? orderItemsTable(items) : ''}
       <p style="text-align:right;font-size:17px;">
-        <strong>Total: <span style="color:${TEAL};">₹${Number(total).toLocaleString('en-IN')}</span></strong>
+        <strong>Total: <span style="color:${TEAL};">&#8377;${Number(total).toLocaleString('en-IN')}</span></strong>
       </p>
       <p>We will notify you once your order is dispatched.</p>
     `),
   }),
 
+  // ── 5. Order Shipped ─────────────────────────────────────────────────────
   order_shipped: ({ name = 'User', orderId, trackingId = '', courier = '', estimatedDate = '' }) => ({
     subject: `Your Order #${orderId} Has Been Shipped 🚚`,
     html: layout(`
@@ -166,21 +190,23 @@ const TEMPLATES = {
     `),
   }),
 
+  // ── 6. Order Delivered ───────────────────────────────────────────────────
   order_delivered: ({ name = 'User', orderId }) => ({
     subject: `Order #${orderId} Delivered! Please Rate Your Experience ⭐`,
     html: layout(`
       <p>Hello <strong>${name}</strong>,</p>
-      <p>✅ Your order <strong>#${orderId}</strong> has been delivered successfully.</p>
+      <p>&#9989; Your order <strong>#${orderId}</strong> has been delivered successfully.</p>
       <p>We hope you are loving your Yogkart products! Please take a moment to share your feedback.</p>
       <div style="text-align:center;margin:28px 0;">
         <a href="${process.env.FRONTEND_URL || 'http://localhost:4200'}/orders"
            style="background:${TEAL};color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:600;">
-          Rate Your Order ⭐
+          Rate Your Order &#11088;
         </a>
       </div>
     `),
   }),
 
+  // ── 7. Password Changed Alert ────────────────────────────────────────────
   password_changed: ({ name = 'User' }) => ({
     subject: `Your Yogkart Password Was Changed`,
     html: layout(`
@@ -195,23 +221,44 @@ const TEMPLATES = {
 };
 
 // ── Main send function ────────────────────────────────────────────────────────
+/**
+ * @param {Object} params
+ * @param {'otp'|'password_reset'|'welcome'|'order_confirmation'|'order_shipped'|'order_delivered'|'password_changed'} params.type
+ * @param {string}  params.to    — recipient email
+ * @param {Object}  params.data  — template-specific data
+ * @returns {Promise<{ messageId: string }>}
+ */
 const sendEmail = async ({ type, to, data = {} }) => {
   const templateFn = TEMPLATES[type];
   if (!templateFn) throw new Error(`Unknown email type: "${type}". Valid: ${Object.keys(TEMPLATES).join(', ')}`);
 
   const { subject, html } = templateFn(data);
 
-  const { data: result, error } = await resend.emails.send({
-    from: 'Yogkart Healthcare <onboarding@resend.dev>',
-    to,
-    subject,
-    html,
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: 'Yogkart Healthcare',
+        email: 'yogkarthealthcare@gmail.com',
+      },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
   });
 
-  if (error) throw new Error(error.message);
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || `Brevo API error: ${response.status}`);
+  }
 
-  console.log(`📧 [${type}] sent to ${to} — msgId: ${result.id}`);
-  return { messageId: result.id };
+  const result = await response.json();
+  console.log(`📧 [${type}] sent to ${to} — msgId: ${result.messageId}`);
+  return { messageId: result.messageId };
 };
 
 module.exports = { sendEmail, TEMPLATES };
