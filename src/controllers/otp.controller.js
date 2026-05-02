@@ -39,7 +39,7 @@ const sendOtp = async (req, res) => {
       }
       const user = exists.rows[0];
       const otp  = generateOtp();
-      saveOtp(email, otp);
+      await saveOtp(email, otp);
       await sendEmail({ type: 'password_reset', to: email, data: { name: user.name, otp } });
       return success(res, null, 'Password reset OTP sent to your email.');
     }
@@ -53,7 +53,7 @@ const sendOtp = async (req, res) => {
     if (existing.rows.length > 0) name = existing.rows[0].name;
 
     const otp = generateOtp();
-    saveOtp(email, otp);
+    await saveOtp(email, otp);
     await sendEmail({ type: 'otp', to: email, data: { name, otp } });
 
     return success(res, null, 'OTP sent successfully. Valid for 10 minutes.');
@@ -77,7 +77,7 @@ const verifyOtpHandler = async (req, res) => {
 
     if (!email || !otp) return badRequest(res, 'Email and OTP are required');
 
-    const result = verifyOtp(email, otp);
+    const result = await verifyOtp(email, otp);
     if (!result.valid) return badRequest(res, result.reason);
 
     // ── purpose: email_verify ──────────────────────────────────────────────

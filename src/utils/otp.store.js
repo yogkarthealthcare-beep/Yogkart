@@ -1,50 +1,49 @@
-/**
- * ============================================================
- * OTP Store — in-memory with TTL
- * ============================================================
- * Production mein Redis use karo:
- *   await redisClient.setEx(`otp:${email}`, 600, JSON.stringify({ otp, attempts: 0 }));
- * ============================================================
- */
-
-const OTP_TTL_MS   = 10 * 60 * 1000; // 10 minutes
-const MAX_ATTEMPTS = 5;
-
-// Map<email, { otp, expiresAt, attempts }>
-const store = new Map();
+const { query } = require('../config/database');
 
 const generateOtp = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
-const saveOtp = (email, otp) => {
-  store.set(email.toLowerCase(), {
-    otp,
-    expiresAt: Date.now() + OTP_TTL_MS,
-    attempts: 0,
-  });
+const saveOtp = async (email, otp) => {
+  await query(
+    `INSERT INTO otp_store (email, otp, expires_at, attempts)
+     VALUES ($1, $2, NOW() + INTERVAL '10 minutes', 0)
+     ON CONFLICT (email) DO UPDATE
+     SET otp = $2, expires_at = NOW() + INTERVAL '10 minutes', attempts = 0`,
+    [email.toLowerCase(), otp]
+  );
 };
 
-const verifyOtp = (email, otp) => {
-  const key    = email.toLowerCase();
-  const record = store.get(key);
+const verifyOtp = async (email, otp) => {
+  const result = await query(
+    `SELECT * FROM otp_store WHERE email = $1`,
+    [email.toLowerCase()]
+  );
 
-  if (!record)                         return { valid: false, reason: 'OTP not found or already used' };
-  if (Date.now() > record.expiresAt)   { store.delete(key); return { valid: false, reason: 'OTP expired' }; }
-  if (record.attempts >= MAX_ATTEMPTS) { store.delete(key); return { valid: false, reason: 'Too many attempts' }; }
+  if (result.rows.length === 0)
+    return { valid: false, reason: 'OTP not found or already used' };
 
-  record.attempts += 1;
-  if (record.otp !== otp.toString())   return { valid: false, reason: 'Invalid OTP' };
+  const record = result.rows[0];
 
-  store.delete(key); // one-time use
+  if (new Date() > new Date(record.expires_at)) {
+    await query(`DELETE FROM otp_store WHERE email = $1`, [email.toLowerCase()]);
+    return { valid: false, reason: 'OTP expired' };
+  }
+
+  if (record.attempts >= 5) {
+    await query(`DELETE FROM otp_store WHERE email = $1`, [email.toLowerCase()]);
+    return { valid: false, reason: 'Too many attempts' };
+  }
+
+  await query(
+    `UPDATE otp_store SET attempts = attempts + 1 WHERE email = $1`,
+    [email.toLowerCase()]
+  );
+
+  if (record.otp !== otp.toString())
+    return { valid: false, reason: 'Invalid OTP' };
+
+  await query(`DELETE FROM otp_store WHERE email = $1`, [email.toLowerCase()]);
   return { valid: true };
 };
-
-// Cleanup expired entries every 15 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of store.entries()) {
-    if (now > val.expiresAt) store.delete(key);
-  }
-}, 15 * 60 * 1000);
 
 module.exports = { generateOtp, saveOtp, verifyOtp };
