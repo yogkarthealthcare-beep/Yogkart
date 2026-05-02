@@ -11,6 +11,7 @@ const saveOtp = async (email, otp) => {
      SET otp = $2, expires_at = NOW() + INTERVAL '10 minutes', attempts = 0`,
     [email.toLowerCase(), otp]
   );
+    console.log(`Saved OTP for ${email}: ${otp}`) // Debug log
 };
 
 const verifyOtp = async (email, otp) => {
