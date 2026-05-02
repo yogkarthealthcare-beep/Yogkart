@@ -119,10 +119,10 @@ const verifyOtpHandler = async (req, res) => {
       refreshToken,
     }, 'OTP verified. Login successful.');
 
-  } catch (err) {
-    console.error('verifyOtp error:', err);
-    return error(res, 'OTP verification failed.');
-  }
+ } catch (err) {
+  console.error('verifyOtp error:', err.message, err.stack);
+  return error(res, err.message || 'OTP verification failed.');
+}
 };
 
 // ── POST /api/auth/reset-password ─────────────────────────────────────────────
