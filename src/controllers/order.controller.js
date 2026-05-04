@@ -119,7 +119,15 @@ const getOrders = async (req, res) => {
       params
     );
 
-    return paginated(res, ordersRes.rows, total, page, limit);
+    // ordersRes rows mein items field normalize karo
+    const orders = ordersRes.rows.map(order => ({
+      ...order,
+      items: (order.items ?? []).map(item => ({
+        ...item,
+        product_name: item.name,  // frontend product_name expect karta hai
+      }))
+    }));
+    return success(res, orders, 'Orders fetched');
   } catch (err) {
     console.error('getOrders error:', err);
     return error(res, 'Failed to fetch orders');
