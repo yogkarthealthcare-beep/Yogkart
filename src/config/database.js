@@ -44,6 +44,11 @@ pool.on('error', (err) => {
 // ✅ Helper query function (important fix)
 const query = (text, params) => pool.query(text, params);
 
+// ✅ Get a client from the pool (for transactions)
+const getClient = async () => {
+  return await pool.connect();
+};
+
 // ✅ Test connection
 const testConnection = async () => {
   try {
@@ -58,5 +63,6 @@ const testConnection = async () => {
 module.exports = {
   pool,
   query,          // 🔥 IMPORTANT (tumhara error yahin tha)
+  getClient,      // 🔥 For transactions
   testConnection
 };
