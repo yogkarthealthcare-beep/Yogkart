@@ -13,7 +13,7 @@ const orderRoutes     = require('./routes/order.routes');
 const wishlistRoutes  = require('./routes/wishlist.routes');
 const addressRoutes   = require('./routes/address.routes');
 const paymentRoutes   = require('./routes/payments.routes');
-
+const adminRoutes = require('./routes/admin.routes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -46,7 +46,7 @@ app.use(cors({
 
 // OPTIONS preflight requests allow karo
 app.options('*', cors());
-
+app.use('/api/admin', adminRoutes);
 // ── Rate Limiting ──────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -90,6 +90,7 @@ app.use('/api/orders',     orderRoutes);
 app.use('/api/wishlist',   wishlistRoutes);
 app.use('/api/addresses',  addressRoutes);
 app.use('/api/payments',   paymentRoutes);
+app.use('/api/admin',      adminRoutes);  
 
 // ── 404 Handler ────────────────────────────────────────
 app.use((req, res) => {
