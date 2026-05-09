@@ -27,6 +27,7 @@ const allowedOrigins = [
   'https://yogkart-eedb8.firebaseapp.com', // Firebase alternate
   'https://www.yogkart.in',               // Custom domain
   'https://www.yogkart.com',               // Custom domain 
+  'https://yogkart.com',
   'https://yogkart.in',                   // Custom domain (without www)
   process.env.FRONTEND_URL,               // Render env variable
 ].filter(Boolean); // null/undefined hata do
