@@ -13,8 +13,8 @@ const orderRoutes     = require('./routes/order.routes');
 const wishlistRoutes  = require('./routes/wishlist.routes');
 const addressRoutes   = require('./routes/address.routes');
 const paymentRoutes   = require('./routes/payments.routes');
-const adminRoutes = require('./routes/admin.routes');
-const adminAuthRoutes = require('./routes/admin.auth.routes'); 
+const adminRoutes     = require('./routes/admin.routes');
+const adminAuthRoutes = require('./routes/admin.auth.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,21 +22,21 @@ const PORT = process.env.PORT || 3000;
 // ── Security Middleware ────────────────────────────────
 app.use(helmet());
 app.set('trust proxy', 1); // ✅ Render ke liye zaroori
+
 const allowedOrigins = [
   'http://localhost:4200',
   'http://localhost:3000',
-  'https://yogkart-eedb8.web.app',        // Firebase hosting
-  'https://yogkart-eedb8.firebaseapp.com', // Firebase alternate
-  'https://www.yogkart.in',               // Custom domain
-  'https://www.yogkart.com',               // Custom domain 
+  'https://yogkart-eedb8.web.app',
+  'https://yogkart-eedb8.firebaseapp.com',
+  'https://www.yogkart.in',
+  'https://www.yogkart.com',
   'https://yogkart.com',
-  'https://yogkart.in',                   // Custom domain (without www)
-  process.env.FRONTEND_URL,               // Render env variable
-].filter(Boolean); // null/undefined hata do
+  'https://yogkart.in',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Postman / server-to-server (no origin) — allow
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
@@ -48,24 +48,24 @@ app.use(cors({
 
 // OPTIONS preflight requests allow karo
 app.options('*', cors());
-app.use('/api/admin', adminRoutes);
-app.use('/api/admin-auth', adminAuthRoutes);
+
 // ── Rate Limiting ──────────────────────────────────────
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // Stricter for auth routes
+  max: 10,
   message: { success: false, message: 'Too many login attempts, please try again later.' },
 });
 
 app.use(globalLimiter);
 
 // ── Body Parsing ───────────────────────────────────────
+// ⚠️ Body parsing routes se PEHLE hona chahiye
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -86,14 +86,15 @@ app.get('/health', (req, res) => {
 });
 
 // ── API Routes ─────────────────────────────────────────
-app.use('/api/auth',       authLimiter, authRoutes);
-app.use('/api/products',   productRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/orders',     orderRoutes);
-app.use('/api/wishlist',   wishlistRoutes);
-app.use('/api/addresses',  addressRoutes);
-app.use('/api/payments',   paymentRoutes);
-app.use('/api/admin',      adminRoutes);  
+app.use('/api/auth',        authLimiter, authRoutes);      // User auth (register, login, etc.)
+app.use('/api/admin-auth',  authLimiter, adminAuthRoutes); // Admin auth (login, logout, me)
+app.use('/api/admin',       adminRoutes);                  // Admin panel routes (protected)
+app.use('/api/products',    productRoutes);
+app.use('/api/categories',  categoryRoutes);
+app.use('/api/orders',      orderRoutes);
+app.use('/api/wishlist',    wishlistRoutes);
+app.use('/api/addresses',   addressRoutes);
+app.use('/api/payments',    paymentRoutes);
 
 // ── 404 Handler ────────────────────────────────────────
 app.use((req, res) => {
@@ -120,18 +121,11 @@ const start = async () => {
   app.listen(PORT, () => {
     console.log(`\n🚀 Yogkart API running on http://localhost:${PORT}`);
     console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`\nEndpoints:`);
-    console.log(`  POST   /api/auth/register`);
-    console.log(`  POST   /api/auth/login`);
-    console.log(`  POST   /api/auth/refresh`);
-    console.log(`  GET    /api/auth/me`);
-    console.log(`  GET    /api/products`);
-    console.log(`  GET    /api/products/:slug`);
-    console.log(`  GET    /api/categories`);
-    console.log(`  GET    /api/orders`);
-    console.log(`  POST   /api/orders`);
-    console.log(`  GET    /api/wishlist`);
-    console.log(`  POST   /api/wishlist/:productId\n`);
+    console.log(`\nKey Endpoints:`);
+    console.log(`  POST   /api/auth/login            ← User login`);
+    console.log(`  POST   /api/admin-auth/login       ← Admin login`);
+    console.log(`  GET    /api/admin-auth/me           ← Admin profile`);
+    console.log(`  GET    /api/admin/dashboard         ← Admin dashboard\n`);
   });
 };
 
