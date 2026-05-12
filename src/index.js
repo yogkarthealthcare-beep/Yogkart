@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const { testConnection } = require('./config/database');
+const { validateEncryptionKey } = require('./utils/encryption');
 const authRoutes      = require('./routes/auth.routes');
 const productRoutes   = require('./routes/product.routes');
 const categoryRoutes  = require('./routes/category.routes');
@@ -73,6 +74,10 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
+
+// ── Initialize Encryption ──────────────────────────────
+// Validate encryption key for credential management
+validateEncryptionKey();
 
 // ── Health Check ───────────────────────────────────────
 app.get('/health', (req, res) => {

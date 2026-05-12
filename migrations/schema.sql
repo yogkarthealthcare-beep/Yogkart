@@ -34,6 +34,36 @@ CREATE TABLE IF NOT EXISTS admin_refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_admin ON admin_refresh_tokens(admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_token ON admin_refresh_tokens(token);
 
+-- ── System Credentials ──────────────────────────────────
+-- Centralized credential management for sensitive configuration
+-- Supports: SMTP, Payment Gateways, API Keys, Firebase, SMS, etc.
+CREATE TABLE IF NOT EXISTS system_credentials (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  credential_key  CITEXT UNIQUE NOT NULL,  -- e.g., SMTP_HOST, RAZORPAY_KEY_ID
+  credential_category VARCHAR(50) NOT NULL,  -- email, payment, api, firebase, sms, other
+  credential_value TEXT NOT NULL,  -- Encrypted value stored as base64
+  description     TEXT,
+  is_encrypted    BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  is_sensitive    BOOLEAN NOT NULL DEFAULT TRUE,  -- Don't show in lists
+  created_by      UUID NOT NULL REFERENCES admins(id) ON DELETE RESTRICT,
+  updated_by      UUID NOT NULL REFERENCES admins(id) ON DELETE RESTRICT,
+  last_used_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_credentials_key ON system_credentials(credential_key);
+CREATE INDEX IF NOT EXISTS idx_credentials_category ON system_credentials(credential_category);
+CREATE INDEX IF NOT EXISTS idx_credentials_active ON system_credentials(is_active);
+CREATE INDEX IF NOT EXISTS idx_credentials_created_by ON system_credentials(created_by);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS trg_credentials_updated ON system_credentials;
+CREATE TRIGGER trg_credentials_updated
+  BEFORE UPDATE ON system_credentials
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 -- ── Users ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

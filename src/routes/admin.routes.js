@@ -13,6 +13,9 @@ const categoriesCtrl = require('../controllers/admin.categories.controller');
 const paymentsCtrl  = require('../controllers/admin.payments.controller');
 const couponsCtrl   = require('../controllers/admin.coupons.controller');
 
+// Routes
+const credentialsRoutes = require('./admin.credentials.routes');
+
 // All admin routes require admin auth
 router.use(adminProtect);
 
@@ -72,5 +75,8 @@ router.post('/coupons',             couponsCtrl.createCoupon);
 router.put('/coupons/:id',          couponsCtrl.updateCoupon);
 router.delete('/coupons/:id',       couponsCtrl.deleteCoupon);
 router.post('/coupons/validate',    couponsCtrl.validateCoupon);
+
+// ── Credentials ────────────────────────────────────────
+router.use('/credentials', credentialsRoutes);
 
 module.exports = router;
