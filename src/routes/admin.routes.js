@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect, adminOnly } = require('../middleware/auth.middleware');
+const { adminProtect, superAdminOnly } = require('../middleware/admin.auth.middleware');
 
 // Controllers
 const dashCtrl      = require('../controllers/admin.dashboard.controller');
@@ -13,8 +13,8 @@ const categoriesCtrl = require('../controllers/admin.categories.controller');
 const paymentsCtrl  = require('../controllers/admin.payments.controller');
 const couponsCtrl   = require('../controllers/admin.coupons.controller');
 
-// All admin routes require auth + admin role
-router.use(protect, adminOnly);
+// All admin routes require admin auth
+router.use(adminProtect);
 
 // ── Dashboard ──────────────────────────────────────────
 router.get('/dashboard', dashCtrl.getDashboardStats);
