@@ -7,6 +7,33 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "citext";
 
+-- ── Admins ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admins (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name            VARCHAR(100) NOT NULL,
+  email           CITEXT UNIQUE NOT NULL,
+  password_hash   VARCHAR(255) NOT NULL,
+  role            VARCHAR(50) NOT NULL DEFAULT 'admin',  -- admin | super_admin
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at   TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
+
+-- ── Admin Refresh Tokens ───────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_refresh_tokens (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id    UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_admin ON admin_refresh_tokens(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_token ON admin_refresh_tokens(token);
+
 -- ── Users ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -184,10 +211,12 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_admins_updated    ON admins;
 DROP TRIGGER IF EXISTS trg_users_updated    ON users;
 DROP TRIGGER IF EXISTS trg_products_updated ON products;
 DROP TRIGGER IF EXISTS trg_orders_updated   ON orders;
 
+CREATE TRIGGER trg_admins_updated    BEFORE UPDATE ON admins    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_users_updated    BEFORE UPDATE ON users    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_products_updated BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_orders_updated   BEFORE UPDATE ON orders   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
