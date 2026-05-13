@@ -250,3 +250,45 @@ CREATE TRIGGER trg_admins_updated    BEFORE UPDATE ON admins    FOR EACH ROW EXE
 CREATE TRIGGER trg_users_updated    BEFORE UPDATE ON users    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_products_updated BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_orders_updated   BEFORE UPDATE ON orders   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── OTP Store ──────────────────────────────────────────
+-- Stores temporary OTPs for email verification and password reset
+CREATE TABLE IF NOT EXISTS otp_store (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email       CITEXT UNIQUE NOT NULL,
+  otp         VARCHAR(6) NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_store_email ON otp_store(email);
+CREATE INDEX IF NOT EXISTS idx_otp_store_expires ON otp_store(expires_at);
+
+-- ── Coupons ────────────────────────────────────────────
+-- Discount coupons and promo codes
+CREATE TABLE IF NOT EXISTS coupons (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  code                VARCHAR(50) UNIQUE NOT NULL,
+  discount_type       VARCHAR(20) NOT NULL CHECK (discount_type IN ('percent', 'flat')),
+  discount_value      DECIMAL(10,2) NOT NULL,
+  min_order_value     DECIMAL(10,2) DEFAULT 0,
+  max_uses            INTEGER,
+  current_uses        INTEGER DEFAULT 0,
+  usage_per_user      INTEGER DEFAULT 1,
+  is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+  description         TEXT,
+  expires_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
+CREATE INDEX IF NOT EXISTS idx_coupons_is_active ON coupons(is_active);
+CREATE INDEX IF NOT EXISTS idx_coupons_expires ON coupons(expires_at);
+
+-- Add coupon trigger for updated_at
+DROP TRIGGER IF EXISTS trg_coupons_updated ON coupons;
+CREATE TRIGGER trg_coupons_updated
+  BEFORE UPDATE ON coupons
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
