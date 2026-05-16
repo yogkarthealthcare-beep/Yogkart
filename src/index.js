@@ -27,6 +27,7 @@ app.set('trust proxy', 1); // ✅ Render ke liye zaroori
 const allowedOrigins = [
   'http://localhost:4200',
   'http://localhost:3000',
+  'http://localhost:64814',
   'https://yogkart-eedb8.web.app',
   'https://yogkart-eedb8.firebaseapp.com',
   'https://www.yogkart.in',
