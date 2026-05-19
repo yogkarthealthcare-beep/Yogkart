@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "routes": [
+    { "src": "/favicon\.ico", "status": 204 },
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ]
+}

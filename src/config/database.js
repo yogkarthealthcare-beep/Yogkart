@@ -1,12 +1,17 @@
 const { Pool } = require('pg');
 const path = require('path');
+const fs = require('fs');
 
 const envPath = path.resolve(process.cwd(), '.env');
-const dotenvResult = require('dotenv').config({ path: envPath });
-if (dotenvResult.error) {
-  console.warn(`⚠️ .env load warning: ${dotenvResult.error.message}`);
+if (fs.existsSync(envPath)) {
+  const dotenvResult = require('dotenv').config({ path: envPath });
+  if (dotenvResult.error) {
+    console.warn(`⚠️ .env load warning: ${dotenvResult.error.message}`);
+  } else {
+    console.log(`✅ Loaded .env from ${envPath}`);
+  }
 } else {
-  console.log(`✅ Loaded .env from ${envPath}`);
+  console.log(`⚠️ .env not found at ${envPath}. Using process.env for production configuration.`);
 }
 
 console.log("🔍 DB CONFIG CHECK:");
@@ -16,24 +21,28 @@ console.log("DB:", process.env.DB_NAME);
 console.log("USER:", process.env.DB_USER);
 console.log("PASSWORD:", process.env.DB_PASSWORD ? "✅ Loaded" : "❌ Missing");
 
-// ❗ अगर env load नहीं हुआ तो तुरंत error
-if (!process.env.DB_HOST) {
-  console.error("❌ ERROR: .env file not loaded properly");
-  process.exit(1);
-}
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+    }
+  : {
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '6543'), // ✅ Supabase pooler port
+      database: process.env.DB_NAME || 'postgres',
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+    };
 
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '6543'), // ✅ Supabase pooler port
-  database: process.env.DB_NAME || 'postgres',
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  ssl: {
-    rejectUnauthorized: false
-  },
-  max: 5,
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 10000,
+  ...poolConfig,
 });
 
 pool.on('connect', () => {
