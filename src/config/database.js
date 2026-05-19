@@ -1,10 +1,13 @@
 const { Pool } = require('pg');
 const path = require('path');
 
-// ✅ FIX: सही path से .env load करो
-require('dotenv').config({
-  path: path.resolve(__dirname, '../../.env')
-});
+const envPath = path.resolve(process.cwd(), '.env');
+const dotenvResult = require('dotenv').config({ path: envPath });
+if (dotenvResult.error) {
+  console.warn(`⚠️ .env load warning: ${dotenvResult.error.message}`);
+} else {
+  console.log(`✅ Loaded .env from ${envPath}`);
+}
 
 console.log("🔍 DB CONFIG CHECK:");
 console.log("HOST:", process.env.DB_HOST);
