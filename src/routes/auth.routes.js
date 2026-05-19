@@ -22,15 +22,17 @@ const loginRules = [
 
 // Social login validation rules
 const socialLoginRules = [
-  body('uid').notEmpty().withMessage('uid required'),
-  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('name').trim().isLength({ min: 1 }).withMessage('name required'),
+  body('uid').optional().notEmpty().withMessage('uid required'),
+  body('email').optional().isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('name').optional().trim().isLength({ min: 1 }).withMessage('name required'),
+  body('accessToken').optional().isString().withMessage('accessToken must be a string'),
+  body('code').optional().isString().withMessage('code must be a string'),
 ];
 
 // ── Standard Auth ───────────────────────────────────────
 router.post('/register',         registerRules,     validate, ctrl.register);
 router.post('/login',            loginRules,        validate, ctrl.login);
-router.post('/social/:provider', socialLoginRules,  validate, ctrl.socialLogin); // Facebook / LinkedIn
+router.post('/social/:provider', socialLoginRules,  validate, ctrl.socialLogin); // Google / Facebook / LinkedIn
 router.post('/refresh',                                       ctrl.refresh);
 router.post('/logout',                                        ctrl.logout);
 router.post('/logout-all',       protect,                     ctrl.logoutAll);

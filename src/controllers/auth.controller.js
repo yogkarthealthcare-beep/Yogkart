@@ -1,10 +1,96 @@
 const bcrypt = require('bcryptjs');
+const https = require('https');
 const { query } = require('../config/database');
 const {
   generateAccessToken, generateRefreshToken,
   saveRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserTokens,
 } = require('../utils/jwt');
 const { success, created, error, unauthorized, badRequest } = require('../utils/response');
+
+const linkedinApiRequest = (url, method = 'GET', body = null, accessToken = null) => {
+  return new Promise((resolve, reject) => {
+    const requestOptions = new URL(url);
+    const headers = {};
+
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+    if (body) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      headers['Content-Length'] = Buffer.byteLength(body);
+    }
+
+    const req = https.request(requestOptions, {
+      method,
+      headers,
+    }, res => {
+      let responseData = '';
+      res.on('data', chunk => responseData += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(responseData || '{}');
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(json);
+          } else {
+            const errorMessage = json.error_description || json.message || responseData;
+            reject(new Error(`LinkedIn API error (${res.statusCode}): ${errorMessage}`));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+};
+
+const exchangeLinkedInCode = async (code) => {
+  const { LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI } = process.env;
+  if (!LINKEDIN_CLIENT_ID || !LINKEDIN_CLIENT_SECRET || !LINKEDIN_REDIRECT_URI) {
+    throw new Error('LinkedIn OAuth configuration is missing. Please set LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI in .env');
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: LINKEDIN_REDIRECT_URI,
+    client_id: LINKEDIN_CLIENT_ID,
+    client_secret: LINKEDIN_CLIENT_SECRET,
+  }).toString();
+
+  const tokenResponse = await linkedinApiRequest('https://www.linkedin.com/oauth/v2/accessToken', 'POST', body);
+  if (!tokenResponse.access_token) {
+    throw new Error('Unable to obtain LinkedIn access token');
+  }
+
+  return tokenResponse.access_token;
+};
+
+const fetchLinkedInProfile = async (accessToken) => {
+  const profile = await linkedinApiRequest('https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,profilePicture(displayImage~:playableStreams))', 'GET', null, accessToken);
+  const emailData = await linkedinApiRequest('https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))', 'GET', null, accessToken);
+
+  const email = emailData?.elements?.[0]?.['handle~']?.emailAddress;
+  const firstName = profile?.localizedFirstName || '';
+  const lastName = profile?.localizedLastName || '';
+  let avatar = null;
+
+  const photoElements = profile?.profilePicture?.['displayImage~']?.elements || [];
+  if (photoElements.length > 0) {
+    const lastElement = photoElements[photoElements.length - 1];
+    avatar = lastElement?.identifiers?.[0]?.identifier || null;
+  }
+
+  return {
+    id: profile?.id,
+    email,
+    name: `${firstName} ${lastName}`.trim(),
+    avatar,
+  };
+};
 
 // ── POST /api/auth/register ────────────────────────────
 const register = async (req, res) => {
@@ -174,15 +260,41 @@ const changePassword = async (req, res) => {
 };
 
 // ── POST /api/auth/social/:provider ───────────────────
-// Google / Facebook social login
+// Google / Facebook / LinkedIn social login
 // Email exist karta hai → seedha login
 // Nahi karta → register karke login
 const socialLogin = async (req, res) => {
   try {
-    const { uid, email, name, photoUrl, accessToken: firebaseToken } = req.body;
-    const provider = req.params.provider; // "google" | "facebook"
+    const { uid, email: bodyEmail, name: bodyName, photoUrl, accessToken: firebaseToken, code } = req.body;
+    const provider = req.params.provider; // "google" | "facebook" | "linkedin"
 
-    if (!email || !name || !uid) {
+    let email = bodyEmail;
+    let name = bodyName;
+    let avatar = photoUrl;
+    let socialUid = uid;
+    let accessToken = firebaseToken;
+
+    if (provider === 'linkedin') {
+      if (!accessToken && !code) {
+        return badRequest(res, 'LinkedIn accessToken or authorization code required');
+      }
+
+      if (!accessToken) {
+        accessToken = await exchangeLinkedInCode(code);
+      }
+
+      const linkedInUser = await fetchLinkedInProfile(accessToken);
+      if (!linkedInUser?.email || !linkedInUser?.name || !linkedInUser?.id) {
+        return badRequest(res, 'Unable to verify LinkedIn profile information');
+      }
+
+      email = linkedInUser.email;
+      name = linkedInUser.name;
+      avatar = avatar || linkedInUser.avatar;
+      socialUid = linkedInUser.id;
+    }
+
+    if (!email || !name || !socialUid) {
       return badRequest(res, 'name, email aur uid required hain');
     }
 
