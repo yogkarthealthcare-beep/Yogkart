@@ -325,7 +325,8 @@ const socialLogin = async (req, res) => {
       // ── CASE B: Naya user — register karo ─────────────
       // Social users ke liye random secure password hash
       // (user kabhi directly use nahi karega)
-      const autoPassword = `Yk@${uid.slice(0, 8)}#9${Date.now().toString(36)}`;
+      const passwordSeed = socialUid || uid || Math.random().toString(36).slice(2, 10);
+      const autoPassword = `Yk@${passwordSeed.slice(0, 8)}#9${Date.now().toString(36)}`;
       const passwordHash = await bcrypt.hash(autoPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
 
       // avatar column exist karta hai schema mein? Haan — add karo

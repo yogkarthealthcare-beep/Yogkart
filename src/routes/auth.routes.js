@@ -1,6 +1,6 @@
 // ── routes/auth.routes.js ──────────────────────────────
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const router = express.Router();
 const ctrl        = require('../controllers/auth.controller');
 const otpCtrl     = require('../controllers/otp.controller');
@@ -22,11 +22,27 @@ const loginRules = [
 
 // Social login validation rules
 const socialLoginRules = [
-  body('uid').optional().notEmpty().withMessage('uid required'),
-  body('email').optional().isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('name').optional().trim().isLength({ min: 1 }).withMessage('name required'),
+  param('provider')
+    .exists().withMessage('Provider required')
+    .isIn(['google', 'facebook', 'linkedin']).withMessage('Valid provider required'),
+  body('uid')
+    .if((value, { req }) => req.params.provider !== 'linkedin')
+    .notEmpty().withMessage('uid required'),
+  body('email')
+    .if((value, { req }) => req.params.provider !== 'linkedin')
+    .isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('name')
+    .if((value, { req }) => req.params.provider !== 'linkedin')
+    .trim().isLength({ min: 1 }).withMessage('name required'),
   body('accessToken').optional().isString().withMessage('accessToken must be a string'),
-  body('code').optional().isString().withMessage('code must be a string'),
+  body('code')
+    .if((value, { req }) => req.params.provider === 'linkedin')
+    .custom((value, { req }) => {
+      if (!value && !req.body.accessToken) {
+        throw new Error('LinkedIn code or accessToken required');
+      }
+      return true;
+    }),
 ];
 
 // ── Standard Auth ───────────────────────────────────────
