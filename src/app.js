@@ -24,6 +24,32 @@ const app = express();
 app.use(helmet());
 app.set('trust proxy', 1);
 
+// Robust IP extractor for serverless environments where `req.socket` may be missing
+const extractIp = (req) => {
+  try {
+    if (req.ip) return req.ip;
+    const fwd = req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip']);
+    if (fwd && typeof fwd === 'string') return fwd.split(',')[0].trim();
+    return req.socket && req.socket.remoteAddress || req.connection && req.connection.remoteAddress || 'unknown';
+  } catch (e) {
+    return 'unknown';
+  }
+};
+
+// Ensure `req.socket.remoteAddress` exists to avoid proxy-addr errors in serverless runtimes
+app.use((req, res, next) => {
+  try {
+    if (!req.socket) {
+      req.socket = {};
+    }
+    if (!req.socket.remoteAddress) {
+      const headerIp = req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip']);
+      req.socket.remoteAddress = headerIp && headerIp.split(',')[0].trim() || req.connection && req.connection.remoteAddress || '127.0.0.1';
+    }
+  } catch (e) {}
+  return next();
+});
+
 const allowedOrigins = [
   'http://localhost:4200',
   'http://localhost:3000',
@@ -53,13 +79,15 @@ app.options('*', cors());
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
-  message: { success: false, message: 'Too many requests, please try again later.' },
+  keyGenerator: extractIp,
+  handler: (req, res) => res.status(429).json({ success: false, message: 'Too many requests, please try again later.' }),
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  message: { success: false, message: 'Too many login attempts, please try again later.' },
+  keyGenerator: extractIp,
+  handler: (req, res) => res.status(429).json({ success: false, message: 'Too many login attempts, please try again later.' }),
 });
 
 app.use(globalLimiter);
