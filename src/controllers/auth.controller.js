@@ -275,23 +275,21 @@ const socialLogin = async (req, res) => {
     let accessToken = firebaseToken;
 
     if (provider === 'linkedin') {
-      if (!accessToken && !code) {
-        return badRequest(res, 'LinkedIn accessToken or authorization code required');
-      }
+      if (accessToken || code) {
+        if (!accessToken) {
+          accessToken = await exchangeLinkedInCode(code);
+        }
 
-      if (!accessToken) {
-        accessToken = await exchangeLinkedInCode(code);
-      }
+        const linkedInUser = await fetchLinkedInProfile(accessToken);
+        if (!linkedInUser?.email || !linkedInUser?.name || !linkedInUser?.id) {
+          return badRequest(res, 'Unable to verify LinkedIn profile information');
+        }
 
-      const linkedInUser = await fetchLinkedInProfile(accessToken);
-      if (!linkedInUser?.email || !linkedInUser?.name || !linkedInUser?.id) {
-        return badRequest(res, 'Unable to verify LinkedIn profile information');
+        email = linkedInUser.email;
+        name = linkedInUser.name;
+        avatar = avatar || linkedInUser.avatar;
+        socialUid = socialUid || linkedInUser.id;
       }
-
-      email = linkedInUser.email;
-      name = linkedInUser.name;
-      avatar = avatar || linkedInUser.avatar;
-      socialUid = linkedInUser.id;
     }
 
     if (!email || !name || !socialUid) {
