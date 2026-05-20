@@ -100,6 +100,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 validateEncryptionKey();
 
+app.get('/favicon.ico', (req, res) => {
+  res.sendStatus(204);
+});
+
 app.get('/health', (req, res) => {
   res.json({
     success: true,
