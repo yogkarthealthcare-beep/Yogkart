@@ -4,7 +4,7 @@ const { body, param } = require('express-validator');
 const router = express.Router();
 const ctrl        = require('../controllers/auth.controller');
 const otpCtrl     = require('../controllers/otp.controller');
-const googleCtrl  = require('../controllers/google-auth.controller'); // ✅ Google idToken verify
+const googleCtrl  = require('../controllers/google-auth.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
@@ -20,38 +20,61 @@ const loginRules = [
   body('password').notEmpty().withMessage('Password required'),
 ];
 
-// Social login validation rules
+// ── Social login validation ─────────────────────────────
+// Google / Facebook: uid + email + name required
+// LinkedIn: code bheja hai toh uid/email/name optional —
+//           backend khud LinkedIn se fetch karega
 const socialLoginRules = [
   param('provider')
     .exists().withMessage('Provider required')
     .isIn(['google', 'facebook', 'linkedin']).withMessage('Valid provider required'),
+
+  // ✅ FIX: Sab fields optional rakho — custom validator neeche sab handle karega
   body('uid').optional().notEmpty().withMessage('uid required'),
   body('email').optional().isEmail().normalizeEmail().withMessage('Valid email required'),
   body('name').optional().trim().isLength({ min: 1 }).withMessage('name required'),
   body('accessToken').optional().isString().withMessage('accessToken must be a string'),
+  body('idToken').optional().isString().withMessage('idToken must be a string'),
   body('code').optional().isString().withMessage('code must be a string'),
+  body('redirectUri').optional().isString(),
+  body('photoUrl').optional().isString(),
+  body('provider').optional().isString(),
+  body('password').optional().isString(),
+
+  // ✅ FIX: Provider-aware custom validation
   body().custom((value, { req }) => {
-    if (req.params.provider === 'linkedin') {
-      if (!req.body.accessToken && !req.body.code && (!req.body.uid || !req.body.email || !req.body.name)) {
-        throw new Error('LinkedIn requires code/accessToken or email, name, uid');
+    const provider = req.params.provider;
+    const { uid, email, name, accessToken, code } = req.body;
+
+    if (provider === 'linkedin') {
+      // LinkedIn: code ya accessToken bheja hai → valid
+      // Ya directly uid + email + name bheja hai → valid
+      const hasCode        = !!code;
+      const hasToken       = !!accessToken;
+      const hasDirectData  = uid && email && name;
+
+      if (!hasCode && !hasToken && !hasDirectData) {
+        throw new Error('LinkedIn requires: code, accessToken, or uid+email+name');
       }
     } else {
-      if (!req.body.uid || !req.body.email || !req.body.name) {
-        throw new Error('uid, email and name are required');
-      }
+      // Google / Facebook: uid + email + name required
+      if (!uid)   throw new Error('uid required');
+      if (!email) throw new Error('Valid email required');
+      if (!name)  throw new Error('name required');
     }
+
     return true;
   }),
 ];
 
 // ── Standard Auth ───────────────────────────────────────
-router.post('/register',         registerRules,     validate, ctrl.register);
-router.post('/login',            loginRules,        validate, ctrl.login);
-router.post('/social/:provider', socialLoginRules,  validate, ctrl.socialLogin); // Google / Facebook / LinkedIn
-router.post('/refresh',                                       ctrl.refresh);
-router.post('/logout',                                        ctrl.logout);
-router.post('/logout-all',       protect,                     ctrl.logoutAll);
-router.get('/me',                protect,                     ctrl.me);
+router.post('/register',         registerRules,    validate, ctrl.register);
+router.post('/login',            loginRules,       validate, ctrl.login);
+router.post('/social/:provider', socialLoginRules, validate, ctrl.socialLogin);
+router.post('/refresh',                                      ctrl.refresh);
+router.post('/logout',                                       ctrl.logout);
+router.post('/logout-all',       protect,                    ctrl.logoutAll);
+router.get('/me',                protect,                    ctrl.me);
 router.put('/me',                protect, [
   body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Name required'),
 ], validate, ctrl.updateMe);
@@ -61,8 +84,6 @@ router.put('/change-password',   protect, [
 ], validate, ctrl.changePassword);
 
 // ── Google Auth ─────────────────────────────────────────
-// Frontend Firebase → idToken → backend verify → JWT milega
-// POST /api/auth/google   Body: { idToken: "..." }
 router.post('/google', [
   body('idToken').notEmpty().withMessage('Google idToken required'),
 ], validate, googleCtrl.googleLogin);
