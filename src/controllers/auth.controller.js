@@ -11,7 +11,9 @@ const { success, created, error, unauthorized, badRequest } = require('../utils/
 const linkedinApiRequest = (url, method = 'GET', body = null, accessToken = null) => {
   return new Promise((resolve, reject) => {
     const requestUrl = new URL(url);
-    const headers = {};
+    const headers = {
+      Accept: 'application/json',
+    };
 
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     if (body) {
@@ -75,21 +77,55 @@ const exchangeLinkedInCode = async (code) => {
 //         OpenID Connect /v2/userinfo use karo
 //         Yeh ek hi call mein sub(uid) + name + email + picture deta hai
 const fetchLinkedInProfile = async (accessToken) => {
-  const userInfo = await linkedinApiRequest(
-    'https://api.linkedin.com/v2/userinfo',
-    'GET',
-    null,
-    accessToken
-  );
+  try {
+    const userInfo = await linkedinApiRequest(
+      'https://api.linkedin.com/v2/userinfo',
+      'GET',
+      null,
+      accessToken
+    );
 
-  // OpenID userinfo response shape:
-  // { sub, name, given_name, family_name, email, picture, email_verified }
-  return {
-    id:     userInfo.sub,
-    email:  userInfo.email,
-    name:   userInfo.name || `${userInfo.given_name || ''} ${userInfo.family_name || ''}`.trim(),
-    avatar: userInfo.picture || null,
-  };
+    return {
+      id:     userInfo.sub,
+      email:  userInfo.email,
+      name:   userInfo.name || `${userInfo.given_name || ''} ${userInfo.family_name || ''}`.trim(),
+      avatar: userInfo.picture || null,
+    };
+  } catch (err) {
+    console.warn('LinkedIn /v2/userinfo failed, falling back to /v2/me and /v2/emailAddress:', err.message);
+
+    const profile = await linkedinApiRequest(
+      'https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,profilePicture(displayImage~:playableStreams))',
+      'GET',
+      null,
+      accessToken
+    );
+
+    const emailData = await linkedinApiRequest(
+      'https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))',
+      'GET',
+      null,
+      accessToken
+    );
+
+    const email = emailData?.elements?.[0]?.['handle~']?.emailAddress;
+    const firstName = profile?.localizedFirstName || '';
+    const lastName = profile?.localizedLastName || '';
+    let avatar = null;
+
+    const photoElements = profile?.profilePicture?.['displayImage~']?.elements || [];
+    if (photoElements.length > 0) {
+      const lastElement = photoElements[photoElements.length - 1];
+      avatar = lastElement?.identifiers?.[0]?.identifier || null;
+    }
+
+    return {
+      id:     profile?.id,
+      email,
+      name:   `${firstName} ${lastName}`.trim(),
+      avatar,
+    };
+  }
 };
 
 // ── POST /api/auth/register ────────────────────────────
@@ -276,22 +312,27 @@ const socialLogin = async (req, res) => {
     // ── LinkedIn: code exchange → userinfo ─────────────
     if (provider === 'linkedin') {
       if (code || accessToken) {
-        // code → access_token
-        if (!accessToken) {
-          accessToken = await exchangeLinkedInCode(code);
+        try {
+          // code → access_token
+          if (!accessToken) {
+            accessToken = await exchangeLinkedInCode(code);
+          }
+
+          // ✅ access_token → user info (OpenID /v2/userinfo or fallback)
+          const linkedInUser = await fetchLinkedInProfile(accessToken);
+
+          if (!linkedInUser?.email || !linkedInUser?.name) {
+            return badRequest(res, 'LinkedIn se email/name nahi mila');
+          }
+
+          email     = linkedInUser.email;
+          name      = linkedInUser.name;
+          avatar    = avatar || linkedInUser.avatar;
+          socialUid = socialUid || linkedInUser.id || `li_${Date.now()}`;
+        } catch (err) {
+          console.error('LinkedIn auth failed:', err);
+          return badRequest(res, err.message || 'Invalid LinkedIn token or code');
         }
-
-        // ✅ access_token → user info (OpenID /v2/userinfo)
-        const linkedInUser = await fetchLinkedInProfile(accessToken);
-
-        if (!linkedInUser?.email || !linkedInUser?.name) {
-          return badRequest(res, 'LinkedIn se email/name nahi mila');
-        }
-
-        email     = linkedInUser.email;
-        name      = linkedInUser.name;
-        avatar    = avatar || linkedInUser.avatar;
-        socialUid = socialUid || linkedInUser.id || `li_${Date.now()}`;
       }
     }
 
