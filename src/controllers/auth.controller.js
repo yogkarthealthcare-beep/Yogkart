@@ -396,7 +396,7 @@ const socialLogin = async (req, res) => {
 
   } catch (err) {
     console.error('Social login error:', err.message);
-    return error(res, 'Social login failed');
+    return error(res, 'Social login failed',err.message);
   }
 };
 
