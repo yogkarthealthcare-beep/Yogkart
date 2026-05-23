@@ -1,0 +1,252 @@
+YOGKART HEALTH / DISEASE DETECTION API TEST DOCUMENTATION
+=========================================================
+
+Base URL
+--------
+http://localhost:3000
+
+
+1. DETECT DISEASE API
+---------------------
+
+API URL:
+/api/detect-disease
+
+Full URL:
+http://localhost:3000/api/detect-disease
+
+API Type:
+POST
+
+Headers:
+Content-Type: application/json
+
+Body Parameters:
+
+Parameter: text
+Type: string
+Required: Yes
+Description: User symptom text. Supports English, Hindi, Hinglish, Arabic, Bhojpuri, and mixed language text.
+
+Request Body Example:
+{
+  "text": "मुझे सिर दर्द और उल्टी जैसा लग रहा है"
+}
+
+More Test Request Bodies:
+
+English:
+{
+  "text": "I have fever and headache"
+}
+
+Hindi:
+{
+  "text": "मुझे बुखार और सिर दर्द है"
+}
+
+Mixed Hindi + English:
+{
+  "text": "मुझे headache और fever है"
+}
+
+Arabic:
+{
+  "text": "عندي صداع وغثيان"
+}
+
+Bhojpuri:
+{
+  "text": "माथा दुखत बा"
+}
+
+No Match Test:
+{
+  "text": "hello random text no health words"
+}
+
+Success Response Example:
+{
+  "success": true,
+  "originalText": "मुझे सिर दर्द और उल्टी जैसा लग रहा है",
+  "detectedLanguage": "Hindi",
+  "detectedSymptoms": [
+    "headache",
+    "nausea"
+  ],
+  "possibleDiseases": [
+    {
+      "disease": "Migraine",
+      "confidence": 92
+    }
+  ],
+  "predictionType": "Single Disease",
+  "guidance": {
+    "recoveryEstimate": "4-72 hours for an episode; recurring cases need medical review.",
+    "diet": [
+      "Drink warm water.",
+      "Eat light meals at regular times.",
+      "Avoid skipped meals, excess caffeine, and trigger foods."
+    ],
+    "yoga": [
+      "Anulom Vilom",
+      "Bhramari Pranayama",
+      "Meditation"
+    ],
+    "ayurveda": [
+      "Brahmi under practitioner guidance.",
+      "Ashwagandha under practitioner guidance.",
+      "Apply a calming routine and avoid known triggers."
+    ],
+    "dailyRoutine": [
+      "Rest in a quiet room during severe headache.",
+      "Reduce screen brightness.",
+      "Maintain a consistent sleep schedule."
+    ],
+    "lifestyle": [
+      "Identify headache triggers.",
+      "Avoid dehydration.",
+      "Consult a doctor if headache is sudden, severe, or associated with weakness."
+    ]
+  },
+  "reminders": [
+    {
+      "type": "water",
+      "time": "7:00 AM",
+      "message": "Drink warm lemon water."
+    },
+    {
+      "type": "medicine",
+      "time": "9:00 AM",
+      "message": "Take prescribed medicine only if advised by your doctor."
+    },
+    {
+      "type": "rest",
+      "time": "1:00 PM",
+      "message": "Rest your eyes in a quiet place for 10 minutes."
+    },
+    {
+      "type": "yoga",
+      "time": "7:00 PM",
+      "message": "Practice gentle breathing or meditation."
+    },
+    {
+      "type": "sleep",
+      "time": "10:00 PM",
+      "message": "Prepare for sleep and avoid screens."
+    }
+  ],
+  "message": "Possible condition detected based on symptoms.",
+  "disclaimer": "This is not a medical diagnosis. Please consult a healthcare professional."
+}
+
+No Match Response:
+{
+  "success": false,
+  "message": "No matching condition found. Please consult a doctor or healthcare specialist."
+}
+
+Validation Error Response:
+{
+  "success": false,
+  "message": "Text is required and must be a non-empty string."
+}
+
+Text Too Long Response:
+{
+  "success": false,
+  "message": "Text must not exceed 2000 characters."
+}
+
+cURL Example:
+curl -X POST http://localhost:3000/api/detect-disease ^
+  -H "Content-Type: application/json" ^
+  -d "{\"text\":\"I have fever and headache\"}"
+
+
+2. GET DEFAULT REMINDERS API
+----------------------------
+
+API URL:
+/api/reminders/defaults
+
+Full URL:
+http://localhost:3000/api/reminders/defaults
+
+API Type:
+GET
+
+Parameters:
+No parameters required.
+
+Success Response Example:
+{
+  "success": true,
+  "reminders": [
+    {
+      "type": "water",
+      "time": "7:00 AM",
+      "message": "Drink warm lemon water."
+    },
+    {
+      "type": "meal",
+      "time": "8:30 AM",
+      "message": "Eat a light breakfast."
+    },
+    {
+      "type": "water",
+      "time": "10:30 AM",
+      "message": "Drink a glass of water."
+    },
+    {
+      "type": "walking",
+      "time": "5:30 PM",
+      "message": "Take a gentle walk if you feel comfortable."
+    },
+    {
+      "type": "yoga",
+      "time": "7:00 PM",
+      "message": "Practice gentle breathing or meditation."
+    },
+    {
+      "type": "sleep",
+      "time": "10:00 PM",
+      "message": "Prepare for sleep and avoid screens."
+    }
+  ]
+}
+
+cURL Example:
+curl -X GET http://localhost:3000/api/reminders/defaults
+
+
+POSTMAN TESTING STEPS
+---------------------
+
+Detect Disease:
+1. Open Postman.
+2. Select POST method.
+3. Enter URL: http://localhost:3000/api/detect-disease
+4. Go to Headers and add:
+   Content-Type: application/json
+5. Go to Body.
+6. Select raw.
+7. Select JSON.
+8. Add:
+   {
+     "text": "I have fever and headache"
+   }
+9. Click Send.
+
+Default Reminders:
+1. Open Postman.
+2. Select GET method.
+3. Enter URL: http://localhost:3000/api/reminders/defaults
+4. Click Send.
+
+
+IMPORTANT MEDICAL DISCLAIMER
+----------------------------
+This API does not provide a confirmed medical diagnosis.
+It only returns possible conditions based on symptoms.
+Users should consult a doctor or healthcare professional for proper diagnosis and treatment.

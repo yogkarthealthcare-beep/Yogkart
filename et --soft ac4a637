@@ -1,0 +1,71 @@
+[33md521bfc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Removed secrets and moved to env
+[33m9d2b885[m Social login failed Linkedin Updated
+[33m9b7e3fc[m Social login failed Linkedin Updated
+[33m026165d[m Move secrets to env
+[33m96ee9f9[m Social login failed Linkedin Updated
+[33mcd0fa95[m fix: static env fallbacks for Vercel
+[33mac4a637[m[33m ([m[1;31morigin/main[m[33m)[m Social login failed Linkedin Updated
+[33maae430f[m Social login failed Linkedin
+[33m186e730[m Social login failed Linkedin
+[33m121884c[m Social login failed Linkedin
+[33m9fba5b9[m Social login failed Linkedin
+[33m586f53c[m LinkedIn Commit 02
+[33m96f6d89[m LinkedIn Commit 02
+[33mb4ef074[m LinkedIn Commit 02
+[33m6a209fd[m LinkedIn Commit 02
+[33m560bc0a[m LinkedIn Commit
+[33m96f48b0[m LinkedIn Commit
+[33m1f2ebeb[m Second Commit
+[33m36bd93e[m Second Commit
+[33m2d5f3c3[m Second Commit
+[33m641a65c[m Second Commit
+[33mfb79b15[m Second Commit
+[33m6b6054a[m Second Commit
+[33ma978607[m Second Commit
+[33m1b3f633[m Second Commit
+[33m683973f[m Second Commit
+[33mff550d5[m Second Commit
+[33m72f5575[m Admin Login Corect api
+[33mb908052[m Admin Login Corect api
+[33mc146160[m Admin Login Corect api
+[33m7ec32d6[m Admin Login Corect api
+[33ma23f799[m Admin Login Corect api
+[33m9a3fa58[m fix: uncomment admin-auth route
+[33m66229ae[m Admin Panel
+[33mc4cc178[m Admin Panel
+[33mc667c88[m Admin Panel
+[33mb2ddc8e[m Admin Panel
+[33ma8aa1d5[m Yogkart CORS URL SOLVE
+[33m1ae2690[m Google Auth
+[33m1f333b5[m Update Code Order Placed
+[33m313a3bd[m Update Code Order Placed
+[33m668d9ea[m Update Code Order Placed
+[33m5cab00a[m Check Modify Code
+[33m41904b6[m Check Modify Code
+[33md035e97[m Checkout Page Add Mulitiple Address
+[33m5a9e9e7[m Checkout Page Add Mulitiple Address
+[33m5f19286[m fix: payment routes register, OTP verify logic fix
+[33mdda9967[m fix: increase otp ttl to 30 minutes
+[33m2ee023b[m fix: use Brevo API for email
+[33m166ddfc[m fix: use Brevo API for email
+[33m30b599a[m fix: use Brevo API for email
+[33m1348bf2[m fix: use Brevo API for email
+[33m99b9714[m fix: nodemailer replaced with Resend API
+[33mb4d706d[m full project upload
+[33md20dfc6[m update otp
+[33m4fce71e[m fix: trust proxy enabled for Render deployment
+[33m251b954[m feat: OTP email API added
+[33md2dda5c[m backend ready
+[33mfb835e4[m final fix featured api
+[33m6673d3f[m fix featured api and routes
+[33me4a3e94[m final fix featured api
+[33m30f5524[m final backend update
+[33m853f998[m final backend update
+[33m93d9adf[m updated backend files
+[33mce55c0d[m updated backend files
+[33m763af37[m Initial API push
+[33m56e13fd[m backend ready
+[33m8523300[m backend ready
+[33mb1e069b[m backend ready
+[33meb9eb38[m final backend with db fix
+[33m728a9fa[m Initial commit

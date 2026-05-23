@@ -1,0 +1,300 @@
+-- =====================================================
+-- YOGKART DATABASE SCHEMA
+-- Run: node src/migrations/run.js
+-- =====================================================
+
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "citext";
+
+-- ── Admins ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admins (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name            VARCHAR(100) NOT NULL,
+  email           CITEXT UNIQUE NOT NULL,
+  password_hash   VARCHAR(255) NOT NULL,
+  role            VARCHAR(50) NOT NULL DEFAULT 'admin',  -- admin | super_admin
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at   TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
+
+-- ── Admin Refresh Tokens ───────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_refresh_tokens (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_id    UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_admin ON admin_refresh_tokens(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_refresh_tokens_token ON admin_refresh_tokens(token);
+
+-- ── System Credentials ──────────────────────────────────
+-- Centralized credential management for sensitive configuration
+-- Supports: SMTP, Payment Gateways, API Keys, Firebase, SMS, etc.
+CREATE TABLE IF NOT EXISTS system_credentials (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  credential_key  CITEXT UNIQUE NOT NULL,  -- e.g., SMTP_HOST, RAZORPAY_KEY_ID
+  credential_category VARCHAR(50) NOT NULL,  -- email, payment, api, firebase, sms, other
+  credential_value TEXT NOT NULL,  -- Encrypted value stored as base64
+  description     TEXT,
+  is_encrypted    BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  is_sensitive    BOOLEAN NOT NULL DEFAULT TRUE,  -- Don't show in lists
+  created_by      UUID NOT NULL REFERENCES admins(id) ON DELETE RESTRICT,
+  updated_by      UUID NOT NULL REFERENCES admins(id) ON DELETE RESTRICT,
+  last_used_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_credentials_key ON system_credentials(credential_key);
+CREATE INDEX IF NOT EXISTS idx_credentials_category ON system_credentials(credential_category);
+CREATE INDEX IF NOT EXISTS idx_credentials_active ON system_credentials(is_active);
+CREATE INDEX IF NOT EXISTS idx_credentials_created_by ON system_credentials(created_by);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS trg_credentials_updated ON system_credentials;
+CREATE TRIGGER trg_credentials_updated
+  BEFORE UPDATE ON system_credentials
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── Users ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name                  VARCHAR(100) NOT NULL,
+  email                 CITEXT UNIQUE NOT NULL,
+  phone                 VARCHAR(20),
+  password_hash         VARCHAR(255) NOT NULL,
+  role                  VARCHAR(20) NOT NULL DEFAULT 'customer',  -- customer | admin
+  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  is_verified           BOOLEAN NOT NULL DEFAULT FALSE,
+  avatar                TEXT,
+  provider              VARCHAR(50),
+  google_id             VARCHAR(255),
+  is_temporary_data     BOOLEAN NOT NULL DEFAULT FALSE,
+  is_profile_completed  BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- ── Refresh Tokens ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
+
+-- ── Categories ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS categories (
+  id         VARCHAR(50) PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL,
+  icon       VARCHAR(50),
+  color      VARCHAR(20),
+  sort_order INTEGER DEFAULT 0,
+  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ── Products ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS products (
+  id               SERIAL PRIMARY KEY,
+  name             VARCHAR(255) NOT NULL,
+  slug             VARCHAR(255) UNIQUE NOT NULL,
+  category_id      VARCHAR(50) REFERENCES categories(id),
+  subcategory      VARCHAR(100),
+  brand            VARCHAR(100) NOT NULL,
+  price            DECIMAL(10,2) NOT NULL,
+  original_price   DECIMAL(10,2) NOT NULL,
+  discount         INTEGER DEFAULT 0,
+  rating           DECIMAL(3,2) DEFAULT 0,
+  review_count     INTEGER DEFAULT 0,
+  stock            INTEGER NOT NULL DEFAULT 0,
+  images           TEXT[] DEFAULT '{}',
+  thumbnail        TEXT,
+  description      TEXT,
+  key_benefits     TEXT[] DEFAULT '{}',
+  ingredients      TEXT,
+  dosage           TEXT,
+  side_effects     TEXT,
+  is_featured      BOOLEAN DEFAULT FALSE,
+  is_new           BOOLEAN DEFAULT FALSE,
+  is_best_seller   BOOLEAN DEFAULT FALSE,
+  tags             TEXT[] DEFAULT '{}',
+  prescription     BOOLEAN DEFAULT FALSE,
+  manufacturer     VARCHAR(255),
+  country_of_origin VARCHAR(100),
+  pack_size        VARCHAR(100),
+  is_active        BOOLEAN DEFAULT TRUE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_slug        ON products(slug);
+CREATE INDEX IF NOT EXISTS idx_products_category    ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_is_active   ON products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);
+CREATE INDEX IF NOT EXISTS idx_products_tags        ON products USING GIN(tags);
+
+-- Full text search
+ALTER TABLE products ADD COLUMN IF NOT EXISTS search_vector TSVECTOR;
+CREATE INDEX IF NOT EXISTS idx_products_search ON products USING GIN(search_vector);
+
+-- Auto update search vector
+CREATE OR REPLACE FUNCTION update_product_search_vector()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.search_vector :=
+    to_tsvector('english', COALESCE(NEW.name, '')) ||
+    to_tsvector('english', COALESCE(NEW.brand, '')) ||
+    to_tsvector('english', COALESCE(NEW.description, '')) ||
+    to_tsvector('english', COALESCE(array_to_string(NEW.tags, ' '), ''));
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_product_search ON products;
+CREATE TRIGGER trg_product_search
+  BEFORE INSERT OR UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION update_product_search_vector();
+
+-- ── Wishlist ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS wishlists (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wishlist_user ON wishlists(user_id);
+
+-- ── Addresses ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS addresses (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        VARCHAR(100) NOT NULL,
+  phone       VARCHAR(20) NOT NULL,
+  line1       TEXT NOT NULL,
+  line2       TEXT,
+  city        VARCHAR(100) NOT NULL,
+  state       VARCHAR(100) NOT NULL,
+  pincode     VARCHAR(10) NOT NULL,
+  is_default  BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_addresses_user ON addresses(user_id);
+
+-- ── Orders ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS orders (
+  id              VARCHAR(20) PRIMARY KEY,  -- YK + timestamp
+  user_id         UUID NOT NULL REFERENCES users(id),
+  status          VARCHAR(30) NOT NULL DEFAULT 'confirmed',
+  subtotal        DECIMAL(10,2) NOT NULL,
+  discount        DECIMAL(10,2) DEFAULT 0,
+  delivery_fee    DECIMAL(10,2) DEFAULT 0,
+  tax             DECIMAL(10,2) DEFAULT 0,
+  total           DECIMAL(10,2) NOT NULL,
+  payment_method  VARCHAR(30) NOT NULL,
+  payment_status  VARCHAR(20) DEFAULT 'paid',
+  address_name    VARCHAR(100),
+  address_phone   VARCHAR(20),
+  address_line1   TEXT,
+  address_city    VARCHAR(100),
+  address_state   VARCHAR(100),
+  address_pincode VARCHAR(10),
+  expected_delivery TIMESTAMPTZ,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_id   ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status    ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_created   ON orders(created_at DESC);
+
+-- ── Order Items ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS order_items (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_id    VARCHAR(20) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id  INTEGER NOT NULL REFERENCES products(id),
+  name        VARCHAR(255) NOT NULL,   -- snapshot at order time
+  thumbnail   TEXT,
+  pack_size   VARCHAR(100),
+  quantity    INTEGER NOT NULL,
+  price       DECIMAL(10,2) NOT NULL,  -- price at order time
+  total       DECIMAL(10,2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+-- ── Updated At trigger ─────────────────────────────────
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_admins_updated    ON admins;
+DROP TRIGGER IF EXISTS trg_users_updated    ON users;
+DROP TRIGGER IF EXISTS trg_products_updated ON products;
+DROP TRIGGER IF EXISTS trg_orders_updated   ON orders;
+
+CREATE TRIGGER trg_admins_updated    BEFORE UPDATE ON admins    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_users_updated    BEFORE UPDATE ON users    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_products_updated BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_orders_updated   BEFORE UPDATE ON orders   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── OTP Store ──────────────────────────────────────────
+-- Stores temporary OTPs for email verification and password reset
+CREATE TABLE IF NOT EXISTS otp_store (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email       CITEXT UNIQUE NOT NULL,
+  otp         VARCHAR(6) NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_store_email ON otp_store(email);
+CREATE INDEX IF NOT EXISTS idx_otp_store_expires ON otp_store(expires_at);
+
+-- ── Coupons ────────────────────────────────────────────
+-- Discount coupons and promo codes
+CREATE TABLE IF NOT EXISTS coupons (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  code                VARCHAR(50) UNIQUE NOT NULL,
+  discount_type       VARCHAR(20) NOT NULL CHECK (discount_type IN ('percent', 'flat')),
+  discount_value      DECIMAL(10,2) NOT NULL,
+  min_order_value     DECIMAL(10,2) DEFAULT 0,
+  max_uses            INTEGER,
+  current_uses        INTEGER DEFAULT 0,
+  usage_per_user      INTEGER DEFAULT 1,
+  is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+  description         TEXT,
+  expires_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
+CREATE INDEX IF NOT EXISTS idx_coupons_is_active ON coupons(is_active);
+CREATE INDEX IF NOT EXISTS idx_coupons_expires ON coupons(expires_at);
+
+-- Add coupon trigger for updated_at
+DROP TRIGGER IF EXISTS trg_coupons_updated ON coupons;
+CREATE TRIGGER trg_coupons_updated
+  BEFORE UPDATE ON coupons
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
