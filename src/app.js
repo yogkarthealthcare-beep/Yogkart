@@ -75,7 +75,7 @@ app.use(cors({
 }));
 
 // Preflight — sab routes ke liye
-app.options(/.*/, cors());
+app.options('*', cors());
 
 // ── Rate Limiters ─────────────────────────────────────
 const globalLimiter = rateLimit({
