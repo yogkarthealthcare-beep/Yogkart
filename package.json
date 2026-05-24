@@ -20,5 +20,8 @@
     "pg": "^8.21.0",
     "postgres": "^3.4.9",
     "razorpay": "^2.9.6"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }
