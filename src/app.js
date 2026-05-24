@@ -25,14 +25,7 @@ app.use(helmet());
 app.set('trust proxy', 1);
 
 // Serverless mein req.socket missing hota hai
-const extractIp = (req) => {
-  try {
-    if (req.ip) return req.ip;
-    const fwd = req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'];
-    if (fwd) return fwd.split(',')[0].trim();
-    return req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
-  } catch { return 'unknown'; }
-};
+
 
 app.use((req, res, next) => {
   try {
@@ -81,7 +74,6 @@ app.use(cors({
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max:      200,
-  keyGenerator: extractIp,
   handler: (req, res) =>
     res.status(429).json({ success: false, message: 'Too many requests, please try again later.' }),
 });
@@ -92,7 +84,6 @@ const globalLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max:      50,
-  keyGenerator: extractIp,
   handler: (req, res) =>
     res.status(429).json({ success: false, message: 'Too many login attempts, please try again later.' }),
 });
