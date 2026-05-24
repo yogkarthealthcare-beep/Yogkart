@@ -27,9 +27,10 @@ app.set('trust proxy', 1);
 // Serverless mein req.socket missing hota hai
 const extractIp = (req) => {
   try {
-    const ip = req.ip || req.headers?.['x-forwarded-for']?.split(',')[0].trim() || req.headers?.['x-real-ip']
-      || req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
-    return rateLimit.ipKeyGenerator(ip);
+    if (req.ip) return req.ip;
+    const fwd = req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'];
+    if (fwd) return fwd.split(',')[0].trim();
+    return req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
   } catch { return 'unknown'; }
 };
 
@@ -47,9 +48,9 @@ app.use((req, res, next) => {
 // ── CORS ──────────────────────────────────────────────
 // ✅ FIX: yogkart.vercel.app add kiya — warna CORS block
 const allowedOrigins = [
-  //'http://localhost:4200',
-  //'http://localhost:3000',
-  //'http://localhost:64814',
+  'http://localhost:4200',
+  'http://localhost:3000',
+  'http://localhost:64814',
   'https://yogkart-eedb8.web.app',
   'https://yogkart-eedb8.firebaseapp.com',
   'https://yogkart.vercel.app',     // ✅ Vercel frontend
@@ -57,7 +58,6 @@ const allowedOrigins = [
   'https://www.yogkart.com',
   'https://yogkart.com',
   'https://yogkart.in',
-  'https://yogkart.vercel.app',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -75,7 +75,7 @@ app.use(cors({
 }));
 
 // Preflight — sab routes ke liye
-app.options('*', cors());
+// Preflight — cors() middleware handles OPTIONS automatically
 
 // ── Rate Limiters ─────────────────────────────────────
 const globalLimiter = rateLimit({
