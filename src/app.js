@@ -57,6 +57,7 @@ const allowedOrigins = [
   'https://www.yogkart.com',
   'https://yogkart.com',
   'https://yogkart.in',
+  'https://yogkart.vercel.app',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
