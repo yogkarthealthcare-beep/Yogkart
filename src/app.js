@@ -18,14 +18,12 @@ const adminAuthRoutes    = require('./routes/admin.auth.routes');
 const diseaseRoutes      = require('./routes/disease.routes');
 const reminderRoutes     = require('./routes/reminder.routes');
 const stepTrackingRoutes = require('./routes/stepTracking.routes');
+const bannerRoutes       = require('./routes/banner.routes');   // ✅ Banner routes
 
 const app = express();
 
 app.use(helmet());
 app.set('trust proxy', 1);
-
-// Serverless mein req.socket missing hota hai
-
 
 app.use((req, res, next) => {
   try {
@@ -39,14 +37,13 @@ app.use((req, res, next) => {
 });
 
 // ── CORS ──────────────────────────────────────────────
-// ✅ FIX: yogkart.vercel.app add kiya — warna CORS block
 const allowedOrigins = [
   'http://localhost:4200',
   'http://localhost:3000',
   'http://localhost:64814',
   'https://yogkart-eedb8.web.app',
   'https://yogkart-eedb8.firebaseapp.com',
-  'https://yogkart.vercel.app',     // ✅ Vercel frontend
+  'https://yogkart.vercel.app',
   'https://www.yogkart.in',
   'https://www.yogkart.com',
   'https://yogkart.com',
@@ -56,7 +53,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // No origin = same-origin / mobile / curl — allow
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     console.warn(`CORS blocked: ${origin}`);
@@ -67,9 +63,6 @@ app.use(cors({
   credentials: true,
 }));
 
-// Preflight — sab routes ke liye
-// Preflight — cors() middleware handles OPTIONS automatically
-
 // ── Rate Limiters ─────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -78,9 +71,6 @@ const globalLimiter = rateLimit({
     res.status(429).json({ success: false, message: 'Too many requests, please try again later.' }),
 });
 
-// ✅ FIX: authLimiter 10 → 50
-// LinkedIn auth mein multiple API calls hoti hain (token exchange + userinfo)
-// 10 requests 15 min mein bahut kam tha — testing aur normal use mein hit ho jaata tha
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max:      50,
@@ -118,6 +108,7 @@ app.use('/api/orders',                   orderRoutes);
 app.use('/api/wishlist',                 wishlistRoutes);
 app.use('/api/addresses',                addressRoutes);
 app.use('/api/payments',                 paymentRoutes);
+app.use('/api/banners',                  bannerRoutes);         // ✅ Banner routes
 app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);
 app.use('/api',                          stepTrackingRoutes);
