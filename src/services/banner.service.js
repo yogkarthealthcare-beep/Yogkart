@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS banners (
   coupon_expiry DATE,
   sort_order INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
+  image_fit VARCHAR(20) DEFAULT 'cover',
+  image_opacity NUMERIC DEFAULT 0.2,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -70,6 +72,10 @@ const ensureBannersSchema = async () => {
   try {
     console.log('⏳ Ensuring banners schema...');
     await query(BANNERS_SCHEMA_SQL);
+    
+    // Add columns if they do not exist
+    await query(`ALTER TABLE banners ADD COLUMN IF NOT EXISTS image_fit VARCHAR(20) DEFAULT 'cover'`);
+    await query(`ALTER TABLE banners ADD COLUMN IF NOT EXISTS image_opacity NUMERIC DEFAULT 0.2`);
     
     // Check if banners table is empty
     const checkRes = await query('SELECT COUNT(*)::integer FROM banners');
