@@ -1,11 +1,17 @@
 const app = require('./app');
 const { testConnection } = require('./config/database');
+const { ensurePaymentGatewaySchema } = require('./services/paymentGatewaySettings.service');
+const { ensureProductSeoSchema } = require('./services/productSeo.service');
+const { ensureBannersSchema } = require('./services/banner.service');
 
 const PORT = process.env.PORT || 3000;
 
 const start = async () => {
   try {
     await testConnection();
+    await ensurePaymentGatewaySchema();
+    await ensureProductSeoSchema();
+    await ensureBannersSchema();
 
     app.listen(PORT, () => {
       console.log(`Yogkart API running on http://localhost:${PORT}`);

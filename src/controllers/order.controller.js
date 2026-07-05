@@ -1,5 +1,6 @@
 const { query, getClient } = require('../config/database');
 const { success, created, notFound, error, paginated, forbidden } = require('../utils/response');
+const { calculateDiscount, normalizeCode } = require('./coupon.controller');
 
 const generateOrderId = () => {
   const ts = Date.now().toString().slice(-8);
@@ -12,7 +13,7 @@ const placeOrder = async (req, res) => {
   try {
     const {
       items, subtotal, discount = 0, delivery_fee = 0, tax = 0, total,
-      payment_method, address,
+      payment_method, address, coupon_code,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -27,6 +28,31 @@ const placeOrder = async (req, res) => {
 
     const initialStatus = ['cod', 'paypal'].includes(payment_method) ? 'confirmed' : 'pending';
     const initialPaymentStatus = payment_method === 'paypal' ? 'paid' : 'pending';
+    let couponCode = normalizeCode(coupon_code);
+    let couponDiscount = 0;
+
+    if (couponCode) {
+      const couponRes = await client.query(
+        `SELECT *
+         FROM coupons
+         WHERE UPPER(code) = $1
+           AND is_active = TRUE
+           AND (expires_at IS NULL OR expires_at > NOW())
+           AND (max_uses IS NULL OR current_uses < max_uses)
+         LIMIT 1`,
+        [couponCode]
+      );
+      if (!couponRes.rows.length) throw new Error('Invalid or expired coupon');
+      const coupon = couponRes.rows[0];
+      if (Number(subtotal) < Number(coupon.min_order_value || 0)) {
+        throw new Error(`Minimum order value Rs. ${coupon.min_order_value} required`);
+      }
+      couponDiscount = calculateDiscount(coupon, subtotal);
+    }
+
+    const totalAmount = couponDiscount > 0
+      ? Math.max(0, Number(subtotal || 0) + Number(delivery_fee || 0) + Number(tax || 0) - couponDiscount)
+      : Number(total || 0);
 
     // Insert order
     await client.query(
@@ -34,17 +60,23 @@ const placeOrder = async (req, res) => {
         id, user_id, status, subtotal, discount, delivery_fee, tax, total,
         payment_method, payment_status,
         address_name, address_phone, address_line1, address_city, address_state, address_pincode,
-        expected_delivery
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        expected_delivery, coupon_code, coupon_discount
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         orderId, req.user.id, initialStatus,
-        subtotal, discount, delivery_fee, tax, total,
+        subtotal, Number(discount) + couponDiscount, delivery_fee, tax, totalAmount,
         payment_method, initialPaymentStatus,
         address.name, address.phone, address.line1,
         address.city, address.state, address.pincode,
-        expectedDelivery,
+        expectedDelivery, couponCode || null, couponDiscount,
       ]
     );
+    if (couponCode) {
+      await client.query(
+        'UPDATE coupons SET current_uses = current_uses + 1 WHERE UPPER(code) = $1',
+        [couponCode]
+      );
+    }
 
     // Insert order items & update stock
     for (const item of items) {

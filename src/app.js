@@ -13,12 +13,15 @@ const orderRoutes        = require('./routes/order.routes');
 const wishlistRoutes     = require('./routes/wishlist.routes');
 const addressRoutes      = require('./routes/address.routes');
 const paymentRoutes      = require('./routes/payments.routes');
+const couponRoutes       = require('./routes/coupon.routes');
 const adminRoutes        = require('./routes/admin.routes');
 const adminAuthRoutes    = require('./routes/admin.auth.routes');
 const diseaseRoutes      = require('./routes/disease.routes');
 const reminderRoutes     = require('./routes/reminder.routes');
 const stepTrackingRoutes = require('./routes/stepTracking.routes');
 const bannerRoutes       = require('./routes/banner.routes');   // ✅ Banner routes
+const seoController      = require('./controllers/seo.controller');
+const socialShareController = require('./controllers/socialShare.controller');
 
 const app = express();
 
@@ -97,6 +100,9 @@ app.get('/health', (req, res) => {
     timestamp:   new Date().toISOString(),
   });
 });
+app.get('/sitemap.xml', seoController.sitemap);
+app.get('/robots.txt', seoController.robots);
+app.get('/share/products/:slug', socialShareController.getSocialPreview);
 
 // ── Routes ────────────────────────────────────────────
 app.use('/api/auth',       authLimiter,  authRoutes);
@@ -108,6 +114,7 @@ app.use('/api/orders',                   orderRoutes);
 app.use('/api/wishlist',                 wishlistRoutes);
 app.use('/api/addresses',                addressRoutes);
 app.use('/api/payments',                 paymentRoutes);
+app.use('/api/coupons',                  couponRoutes);
 app.use('/api/banners',                  bannerRoutes);         // ✅ Banner routes
 app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);

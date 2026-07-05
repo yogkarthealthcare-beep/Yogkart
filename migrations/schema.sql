@@ -7,6 +7,11 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "citext";
 
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
 -- ── Admins ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admins (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -103,10 +108,14 @@ CREATE TABLE IF NOT EXISTS categories (
   name       VARCHAR(100) NOT NULL,
   icon       VARCHAR(50),
   color      VARCHAR(20),
+  image      TEXT,
   sort_order INTEGER DEFAULT 0,
   is_active  BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE categories
+  ADD COLUMN IF NOT EXISTS image TEXT;
 
 -- ── Products ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS products (
@@ -147,6 +156,26 @@ CREATE INDEX IF NOT EXISTS idx_products_category    ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_is_active   ON products(is_active);
 CREATE INDEX IF NOT EXISTS idx_products_is_featured ON products(is_featured);
 CREATE INDEX IF NOT EXISTS idx_products_tags        ON products USING GIN(tags);
+
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS seo_title VARCHAR(70),
+  ADD COLUMN IF NOT EXISTS meta_description VARCHAR(180),
+  ADD COLUMN IF NOT EXISTS meta_keywords TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS canonical_url TEXT,
+  ADD COLUMN IF NOT EXISTS short_description TEXT,
+  ADD COLUMN IF NOT EXISTS seo_description TEXT,
+  ADD COLUMN IF NOT EXISTS product_highlights TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS image_alt_text VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS faq_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS schema_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS seo_score INTEGER NOT NULL DEFAULT 0
+    CHECK (seo_score >= 0 AND seo_score <= 100),
+  ADD COLUMN IF NOT EXISTS seo_suggestions TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS seo_generated_by VARCHAR(20) DEFAULT 'template',
+  ADD COLUMN IF NOT EXISTS seo_generated_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_products_active_slug
+  ON products (slug) WHERE is_active = TRUE;
 
 -- Full text search
 ALTER TABLE products ADD COLUMN IF NOT EXISTS search_vector TSVECTOR;
@@ -210,6 +239,8 @@ CREATE TABLE IF NOT EXISTS orders (
   total           DECIMAL(10,2) NOT NULL,
   payment_method  VARCHAR(30) NOT NULL,
   payment_status  VARCHAR(20) DEFAULT 'paid',
+  coupon_code      VARCHAR(50),
+  coupon_discount  DECIMAL(10,2) DEFAULT 0,
   address_name    VARCHAR(100),
   address_phone   VARCHAR(20),
   address_line1   TEXT,
@@ -225,6 +256,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_orders_user_id   ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status    ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created   ON orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_coupon_code ON orders (UPPER(coupon_code)) WHERE coupon_code IS NOT NULL;
 
 -- ── Order Items ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS order_items (
@@ -297,4 +329,65 @@ CREATE INDEX IF NOT EXISTS idx_coupons_expires ON coupons(expires_at);
 DROP TRIGGER IF EXISTS trg_coupons_updated ON coupons;
 CREATE TRIGGER trg_coupons_updated
   BEFORE UPDATE ON coupons
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS database_backup_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  status VARCHAR(20) NOT NULL,
+  file_name TEXT,
+  file_size_bytes BIGINT DEFAULT 0,
+  message TEXT,
+  created_by UUID REFERENCES admins(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_database_backup_history_created
+  ON database_backup_history (created_at DESC);
+
+-- Payment Gateway Settings
+CREATE TABLE IF NOT EXISTS payment_gateway_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  gateway_name VARCHAR(30) NOT NULL UNIQUE,
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  environment VARCHAR(20) NOT NULL DEFAULT 'sandbox'
+    CHECK (environment IN ('sandbox', 'production')),
+  client_id_encrypted TEXT,
+  secret_key_encrypted TEXT,
+  callback_url TEXT,
+  return_url TEXT,
+  webhook_url TEXT,
+  additional_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by UUID REFERENCES admins(id) ON DELETE SET NULL,
+  updated_by UUID REFERENCES admins(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE payment_gateway_settings
+  DROP CONSTRAINT IF EXISTS payment_gateway_name_supported;
+
+ALTER TABLE payment_gateway_settings
+  ADD CONSTRAINT payment_gateway_name_supported
+    CHECK (gateway_name IN ('razorpay', 'cashfree', 'payu', 'paypal'));
+
+CREATE INDEX IF NOT EXISTS idx_payment_gateway_enabled
+  ON payment_gateway_settings (gateway_name) WHERE is_enabled = TRUE;
+
+CREATE TABLE IF NOT EXISTS payment_gateway_audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  gateway_name VARCHAR(30) NOT NULL,
+  action VARCHAR(30) NOT NULL,
+  changed_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  admin_id UUID REFERENCES admins(id) ON DELETE SET NULL,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_gateway_audit_gateway_created
+  ON payment_gateway_audit_logs (gateway_name, created_at DESC);
+
+DROP TRIGGER IF EXISTS trg_payment_gateway_settings_updated ON payment_gateway_settings;
+CREATE TRIGGER trg_payment_gateway_settings_updated
+  BEFORE UPDATE ON payment_gateway_settings
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

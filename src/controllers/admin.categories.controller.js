@@ -12,6 +12,13 @@
 const { query } = require('../config/database');
 const { success, created, notFound, error } = require('../utils/response');
 
+const categoryImageFromBody = (body) => {
+  if (body.image !== undefined) return body.image;
+  if (body.image_url !== undefined) return body.image_url;
+  if (body.image_path !== undefined) return body.image_path;
+  return undefined;
+};
+
 // ── GET /api/admin/categories ──────────────────────────
 const getCategories = async (req, res) => {
   try {
@@ -21,8 +28,7 @@ const getCategories = async (req, res) => {
 
     const result = await query(`
       SELECT
-        c.id, c.name, c.icon, c.color,
-        c.sort_order, c.is_active, c.created_at,
+        c.*,
         COUNT(p.id)::int AS product_count
       FROM categories c
       LEFT JOIN products p ON p.category_id = c.id AND p.is_active = TRUE
@@ -42,6 +48,7 @@ const getCategories = async (req, res) => {
 const createCategory = async (req, res) => {
   try {
     const { name, icon, color, sort_order = 0 } = req.body;
+    const image = categoryImageFromBody(req.body);
 
     if (!name) return error(res, 'Category name is required', 400);
 
@@ -50,10 +57,10 @@ const createCategory = async (req, res) => {
     const id = rawId.slice(0, 50);
 
     const result = await query(
-      `INSERT INTO categories (id, name, icon, color, sort_order)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO categories (id, name, icon, color, image, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [id, name.trim(), icon || null, color || null, parseInt(sort_order)]
+      [id, name.trim(), icon || null, color || null, image || null, parseInt(sort_order)]
     );
 
     return created(res, { category: result.rows[0] }, 'Category created successfully');
@@ -68,6 +75,7 @@ const createCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { name, icon, color, sort_order, is_active } = req.body;
+    const image = categoryImageFromBody(req.body);
 
     const updates = [];
     const params = [];
@@ -77,6 +85,7 @@ const updateCategory = async (req, res) => {
     if (name       !== undefined) { updates.push(`name = $${idx++}`);       params.push(name.trim()); }
     if (icon       !== undefined) { updates.push(`icon = $${idx++}`);       params.push(icon); }
     if (color      !== undefined) { updates.push(`color = $${idx++}`);      params.push(color); }
+    if (image      !== undefined) { updates.push(`image = $${idx++}`);      params.push(image || null); }
     if (sort_order !== undefined) { updates.push(`sort_order = $${idx++}`); params.push(parseInt(sort_order)); }
     if (is_active  !== undefined) { updates.push(`is_active = $${idx++}`);  params.push(Boolean(is_active)); }
 

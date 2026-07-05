@@ -6,7 +6,15 @@ const crypto = require('crypto');
 // ─────────────────────────────────────────────────────
 
 const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
+const buildEncryptionKey = () => {
+  const configured = process.env.ENCRYPTION_KEY;
+  if (!configured) return null;
+  if (/^[a-f0-9]{64}$/i.test(configured)) return Buffer.from(configured, 'hex');
+  if (Buffer.byteLength(configured, 'utf8') === 32) return Buffer.from(configured, 'utf8');
+  return crypto.createHash('sha256').update(configured, 'utf8').digest();
+};
+
+const ENCRYPTION_KEY = buildEncryptionKey();
 const ENCODING = 'hex';
 const AUTH_TAG_LENGTH = 16;
 const IV_LENGTH = 12;
@@ -17,6 +25,7 @@ const IV_LENGTH = 12;
 const encryptCredential = (plaintext) => {
   try {
     if (!plaintext) return null;
+    if (!ENCRYPTION_KEY) throw new Error('ENCRYPTION_KEY is not configured');
 
     // Generate random IV (initialization vector)
     const iv = crypto.randomBytes(IV_LENGTH);
@@ -45,6 +54,7 @@ const encryptCredential = (plaintext) => {
 const decryptCredential = (encryptedData) => {
   try {
     if (!encryptedData) return null;
+    if (!ENCRYPTION_KEY) throw new Error('ENCRYPTION_KEY is not configured');
 
     // Split IV, authTag, and encrypted data
     const parts = encryptedData.split(':');
@@ -86,9 +96,7 @@ const maskCredentialValue = (value, showLength = 4) => {
 // ──────────────────────────────────────────────────────
 const validateEncryptionKey = () => {
   if (!process.env.ENCRYPTION_KEY) {
-    console.warn('⚠️  WARNING: ENCRYPTION_KEY not set in .env. Using random key.');
-    console.warn('⚠️  This will cause decryption to fail if the app restarts.');
-    console.warn('⚠️  Set ENCRYPTION_KEY=<32-byte-hex-key> in your .env file');
+    throw new Error('ENCRYPTION_KEY must be configured before encrypted credentials can be used');
   }
 };
 

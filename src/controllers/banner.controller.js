@@ -10,7 +10,7 @@ const getBanners = async (req, res) => {
     );
     return success(res, { banners: result.rows });
   } catch (err) {
-    console.error('getBanners error:', err.message);
+    console.error('[Banner Controller] getBanners error:', err);
     return error(res, 'Failed to fetch banners');
   }
 };
@@ -23,6 +23,7 @@ const adminGetBanners = async (req, res) => {
     );
     return success(res, { banners: result.rows });
   } catch (err) {
+    console.error('[Banner Controller] adminGetBanners error:', err);
     return error(res, 'Failed to fetch banners');
   }
 };
@@ -62,7 +63,7 @@ const createBanner = async (req, res) => {
     );
     return success(res, { banner: result.rows[0] }, 'Banner created');
   } catch (err) {
-    console.error('createBanner error:', err.message);
+    console.error('[Banner Controller] createBanner error:', err);
     return error(res, 'Failed to create banner');
   }
 };
@@ -100,6 +101,7 @@ const updateBanner = async (req, res) => {
     if (!result.rows.length) return notFound(res, 'Banner not found');
     return success(res, { banner: result.rows[0] }, 'Banner updated');
   } catch (err) {
+    console.error('[Banner Controller] updateBanner error:', err);
     return error(res, 'Failed to update banner');
   }
 };
@@ -112,6 +114,7 @@ const deleteBanner = async (req, res) => {
     if (!result.rows.length) return notFound(res, 'Banner not found');
     return success(res, null, 'Banner deleted');
   } catch (err) {
+    console.error('[Banner Controller] deleteBanner error:', err);
     return error(res, 'Failed to delete banner');
   }
 };
@@ -127,6 +130,7 @@ const toggleBanner = async (req, res) => {
     if (!result.rows.length) return notFound(res, 'Banner not found');
     return success(res, result.rows[0], `Banner ${result.rows[0].is_active ? 'activated' : 'deactivated'}`);
   } catch (err) {
+    console.error('[Banner Controller] toggleBanner error:', err);
     return error(res, 'Failed to toggle banner');
   }
 };

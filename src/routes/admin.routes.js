@@ -11,7 +11,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { adminProtect } = require('../middleware/admin.auth.middleware');
+const { adminProtect, superAdminOnly } = require('../middleware/admin.auth.middleware');
 
 // Controllers
 const dashCtrl      = require('../controllers/admin.dashboard.controller');
@@ -23,7 +23,9 @@ const analyticsCtrl = require('../controllers/admin.analytics.controller');
 const categoriesCtrl = require('../controllers/admin.categories.controller');
 const paymentsCtrl  = require('../controllers/admin.payments.controller');
 const couponsCtrl   = require('../controllers/admin.coupons.controller');
+const databaseCtrl  = require('../controllers/admin.database.controller');
 const credentialsRoutes = require('./admin.credentials.routes');
+const paymentGatewaysCtrl = require('../controllers/admin.payment-gateways.controller');
 
 // ── All admin routes → admin JWT required ──────────────
 router.use(adminProtect);
@@ -42,6 +44,7 @@ router.delete('/orders/:id',       ordersCtrl.cancelOrder);
 // ── Products ──────────────────────────────────────────
 // IMPORTANT: /products/bulk-stock PEHLE, /products/:id BAAD MEIN
 router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);  // ← PEHLE
+router.post('/products/seo/generate',     productsCtrl.generateSeoPreview);
 router.get('/products',                  productsCtrl.getProducts);
 router.get('/products/:id',              productsCtrl.getProduct);
 router.post('/products',                 productsCtrl.createProduct);
@@ -83,8 +86,17 @@ router.get('/payments',                       paymentsCtrl.getPayments);
 router.patch('/payments/:orderId/status',     paymentsCtrl.updatePaymentStatus);
 router.post('/refunds',                       paymentsCtrl.initiateRefund);
 
+// Payment gateway credentials are restricted to super admins.
+router.get('/settings/payment-gateways', superAdminOnly, paymentGatewaysCtrl.list);
+router.put('/settings/payment-gateways/:gateway', superAdminOnly, paymentGatewaysCtrl.update);
+
+// Database management
+router.get('/database/stats', superAdminOnly, databaseCtrl.getStats);
+router.post('/database/backup', superAdminOnly, databaseCtrl.createBackup);
+
 // ── Coupons (existing — not changed) ──────────────────
 router.get('/coupons',           couponsCtrl.getCoupons);
+router.get('/coupons/report',    couponsCtrl.getCouponReport);
 router.post('/coupons',          couponsCtrl.createCoupon);
 router.put('/coupons/:id',       couponsCtrl.updateCoupon);
 router.delete('/coupons/:id',    couponsCtrl.deleteCoupon);

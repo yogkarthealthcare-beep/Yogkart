@@ -23,5 +23,10 @@
   },
   "devDependencies": {
     "cross-env": "^10.1.0"
+  },
+  "scripts": {
+    "testdata:reviews:seed": "node scripts/seed_rating_review_test_data.js",
+    "testdata:reviews:verify": "node scripts/verify_rating_review_test_data.js",
+    "testdata:reviews:rollback": "node scripts/rollback_rating_review_test_data.js"
   }
 }

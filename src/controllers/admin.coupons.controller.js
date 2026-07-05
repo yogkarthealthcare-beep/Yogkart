@@ -111,7 +111,7 @@ const validateCoupon = async (req, res) => {
       `SELECT * FROM coupons
        WHERE code = $1 AND is_active = TRUE
          AND (expires_at IS NULL OR expires_at > NOW())
-         AND (max_uses IS NULL OR used_count < max_uses)`,
+         AND (max_uses IS NULL OR current_uses < max_uses)`,
       [code?.toUpperCase()]
     );
 
@@ -132,4 +132,50 @@ const validateCoupon = async (req, res) => {
   }
 };
 
-module.exports = { getCoupons, createCoupon, updateCoupon, deleteCoupon, validateCoupon };
+const getCouponReport = async (req, res) => {
+  try {
+    const code = String(req.query.code || req.params.code || 'AMANSPECIAL20').trim().toUpperCase();
+    const summaryRes = await query(
+      `SELECT
+         COUNT(o.id)::int AS total_orders,
+         COALESCE(SUM(o.total), 0)::numeric AS total_sales,
+         COALESCE(SUM(o.coupon_discount), 0)::numeric AS total_discount
+       FROM orders o
+       WHERE UPPER(o.coupon_code) = $1`,
+      [code]
+    );
+    const ordersRes = await query(
+      `SELECT
+         o.id, o.created_at, o.status, o.payment_method, o.payment_status,
+         o.subtotal, o.discount, o.coupon_code, o.coupon_discount, o.total,
+         u.id AS customer_id, u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone
+       FROM orders o
+       JOIN users u ON u.id = o.user_id
+       WHERE UPPER(o.coupon_code) = $1
+       ORDER BY o.created_at DESC
+       LIMIT 500`,
+      [code]
+    );
+
+    const customers = Array.from(
+      new Map(ordersRes.rows.map(order => [order.customer_id, {
+        id: order.customer_id,
+        name: order.customer_name,
+        email: order.customer_email,
+        phone: order.customer_phone,
+      }])).values()
+    );
+
+    return success(res, {
+      code,
+      summary: summaryRes.rows[0],
+      customers,
+      orders: ordersRes.rows,
+    }, 'Coupon report fetched');
+  } catch (err) {
+    console.error('getCouponReport error:', err);
+    return error(res, 'Failed to fetch coupon report');
+  }
+};
+
+module.exports = { getCoupons, createCoupon, updateCoupon, deleteCoupon, validateCoupon, getCouponReport };

@@ -1,6 +1,9 @@
 // api/index.js — Vercel serverless entry point
 const app = require('../src/app');
 const { testConnection } = require('../src/config/database');
+const { ensurePaymentGatewaySchema } = require('../src/services/paymentGatewaySettings.service');
+const { ensureProductSeoSchema } = require('../src/services/productSeo.service');
+const { ensureBannersSchema } = require('../src/services/banner.service');
 
 let dbConnected = false;
 
@@ -38,6 +41,9 @@ module.exports = async (req, res) => {
     // DB connection ek baar karo, reuse karo (Vercel warm instances)
     if (!dbConnected) {
       await testConnection();
+      await ensurePaymentGatewaySchema();
+      await ensureProductSeoSchema();
+      await ensureBannersSchema();
       dbConnected = true;
     }
     return app(req, res);

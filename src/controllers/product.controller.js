@@ -9,7 +9,10 @@ const PRODUCT_FIELDS = `
   p.ingredients, p.dosage, p.side_effects,
   p.is_featured, p.is_new, p.is_best_seller, p.tags,
   p.prescription, p.manufacturer, p.country_of_origin, p.pack_size,
-  p.created_at
+  p.seo_title, p.meta_description, p.meta_keywords, p.canonical_url,
+  p.short_description, p.seo_description, p.product_highlights,
+  p.image_alt_text, p.faq_json, p.schema_json, p.seo_score,
+  p.created_at, p.updated_at
 `;
 
 // ── GET /api/products ──────────────────────────────────

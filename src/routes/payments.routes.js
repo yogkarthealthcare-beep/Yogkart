@@ -1,232 +1,382 @@
-// routes/payments.js  –  Add to your existing Express app
-// npm install razorpay paytm-pg-node-sdk @phonepe/pg-node-sdk
-
 const express = require('express');
-const router  = express.Router();
-const crypto  = require('crypto');
+const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const { query } = require('../config/database');
+const {
+  getGatewaySettings,
+  getPublicGatewaySettings,
+} = require('../services/paymentGatewaySettings.service');
 
-// ── Razorpay instance ─────────────────────────────────────────────────────
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+const router = express.Router();
+
+const sendGatewayError = (res, err, fallback) => {
+  console.error(fallback, err.message);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.status ? err.message : fallback,
+  });
+};
+
+const cashfreeBaseUrl = (environment) => (
+  environment === 'production'
+    ? 'https://api.cashfree.com/pg'
+    : 'https://sandbox.cashfree.com/pg'
+);
+
+const paypalBaseUrl = (environment) => (
+  environment === 'production'
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com'
+);
+
+const payuBaseUrl = (environment) => (
+  environment === 'production'
+    ? 'https://secure.payu.in/_payment'
+    : 'https://test.payu.in/_payment'
+);
+
+const cashfreeHeaders = (settings, extra = {}) => ({
+  'Content-Type': 'application/json',
+  'x-api-version': settings.additionalConfig.apiVersion || '2025-01-01',
+  'x-client-id': settings.clientId,
+  'x-client-secret': settings.secretKey,
+  ...extra,
 });
 
-// ════════════════════════════════════════════════════════════
-//  RAZORPAY
-// ════════════════════════════════════════════════════════════
+const payuHash = ({
+  key,
+  txnid,
+  amount,
+  productinfo,
+  firstname,
+  email,
+  salt,
+  udf1 = '',
+  udf2 = '',
+  udf3 = '',
+  udf4 = '',
+  udf5 = '',
+}) => crypto
+  .createHash('sha512')
+  .update([
+    key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email,
+    udf1,
+    udf2,
+    udf3,
+    udf4,
+    udf5,
+    '',
+    '',
+    '',
+    '',
+    '',
+    salt,
+  ].join('|'))
+  .digest('hex');
 
-// POST /api/payments/razorpay/create-order
+const payuResponseHash = ({
+  additionalCharges = '',
+  salt,
+  status,
+  udf1 = '',
+  udf2 = '',
+  udf3 = '',
+  udf4 = '',
+  udf5 = '',
+  email = '',
+  firstname = '',
+  productinfo = '',
+  amount = '',
+  txnid = '',
+  key = '',
+}) => {
+  const parts = [
+    salt,
+    status,
+    '',
+    '',
+    '',
+    '',
+    '',
+    udf5,
+    udf4,
+    udf3,
+    udf2,
+    udf1,
+    email,
+    firstname,
+    productinfo,
+    amount,
+    txnid,
+    key,
+  ];
+  if (additionalCharges) parts.unshift(additionalCharges);
+  return crypto
+    .createHash('sha512')
+    .update(parts.join('|'))
+    .digest('hex');
+};
+
+router.get('/gateways', async (_req, res) => {
+  try {
+    res.json({ success: true, data: { gateways: await getPublicGatewaySettings() } });
+  } catch (err) {
+    sendGatewayError(res, err, 'Could not load payment methods');
+  }
+});
+
 router.post('/razorpay/create-order', async (req, res) => {
   try {
-    const { amount, currency, receipt } = req.body;  // amount in paise
-
-    const rzpOrder = await razorpay.orders.create({
-      amount,
-      currency: currency ?? 'INR',
-      receipt,
+    const settings = await getGatewaySettings('razorpay', { requireEnabled: true });
+    const { amount, currency = 'INR', receipt } = req.body;
+    if (!Number.isInteger(amount) || amount < 100 || currency !== 'INR') {
+      return res.status(400).json({ success: false, message: 'A valid INR amount is required' });
+    }
+    const razorpay = new Razorpay({
+      key_id: settings.clientId,
+      key_secret: settings.secretKey,
     });
-
-    // We expect receipt to be the DB orderId
-    const dbOrderId = receipt || `YK-${Date.now()}`;
-
+    const order = await razorpay.orders.create({ amount, currency, receipt });
     res.json({
-      orderId:         dbOrderId,
-      razorpayOrderId: rzpOrder.id,
-      amount:          rzpOrder.amount,
+      orderId: receipt || `YK-${Date.now()}`,
+      razorpayOrderId: order.id,
+      amount: order.amount,
+      keyId: settings.clientId,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Could not create Razorpay order', error: err.message });
+    sendGatewayError(res, err, 'Could not create Razorpay order');
   }
 });
 
-// POST /api/payments/razorpay/verify
 router.post('/razorpay/verify', async (req, res) => {
   try {
+    const settings = await getGatewaySettings('razorpay', { requireEnabled: true });
     const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    const body      = razorpay_order_id + '|' + razorpay_payment_id;
-    const expected  = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(body)
+    const expected = crypto
+      .createHmac('sha256', settings.secretKey)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
-
-    if (expected !== razorpay_signature) {
+    const received = Buffer.from(String(razorpay_signature || ''));
+    const calculated = Buffer.from(expected);
+    if (
+      received.length !== calculated.length
+      || !crypto.timingSafeEqual(received, calculated)
+    ) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
-
-    // Update DB: mark order as PAID
     if (orderId) {
-      await query(`UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`, [orderId]);
+      await query(
+        `UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`,
+        [orderId]
+      );
     }
-    
     res.json({ success: true, orderId });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    sendGatewayError(res, err, 'Razorpay verification failed');
   }
 });
 
-// ════════════════════════════════════════════════════════════
-//  PAYTM
-// ════════════════════════════════════════════════════════════
-
-// POST /api/payments/paytm/initiate
-router.post('/paytm/initiate', async (req, res) => {
+router.post('/cashfree/create-order', async (req, res) => {
   try {
-    const { amount, address, receipt } = req.body;
-    const orderId = receipt || `PAYTM-${Date.now()}`;
+    const settings = await getGatewaySettings('cashfree', { requireEnabled: true });
+    const { amount, currency = 'INR', receipt, address = {}, customer = {} } = req.body;
+    if (!Number.isInteger(amount) || amount < 100 || currency !== 'INR') {
+      return res.status(400).json({ success: false, message: 'A valid INR amount is required' });
+    }
+    const orderId = String(receipt || `YKCF-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 45);
+    const orderMeta = {};
+    if (settings.returnUrl) {
+      orderMeta.return_url = settings.returnUrl.includes('{order_id}')
+        ? settings.returnUrl
+        : `${settings.returnUrl}${settings.returnUrl.includes('?') ? '&' : '?'}cashfree_order_id={order_id}`;
+    }
+    if (settings.webhookUrl) orderMeta.notify_url = settings.webhookUrl;
 
-    // Paytm Transaction Token API
-    const PaytmChecksum = require('paytmchecksum');
-
-    const paytmParams = {
-      body: {
-        requestType:   'Payment',
-        mid:           process.env.PAYTM_MID,
-        websiteName:   'WEBSTAGING',
-        orderId,
-        callbackUrl:   `${process.env.APP_URL}/api/payments/paytm/callback`,
-        txnAmount:     { value: (amount / 100).toFixed(2), currency: 'INR' },
-        userInfo:      { custId: address?.name ?? 'CUST001' },
-      }
-    };
-
-    const checksum = await PaytmChecksum.generateSignatureByString(
-      JSON.stringify(paytmParams.body),
-      process.env.PAYTM_MERCHANT_KEY
-    );
-
-    paytmParams.head = { signature: checksum };
-
-    const resp = await fetch(
-      `https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction?mid=${process.env.PAYTM_MID}&orderId=${orderId}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paytmParams) }
-    ).then(r => r.json());
-
+    const response = await fetch(`${cashfreeBaseUrl(settings.environment)}/orders`, {
+      method: 'POST',
+      headers: cashfreeHeaders(settings, { 'x-idempotency-key': crypto.randomUUID() }),
+      body: JSON.stringify({
+        order_id: orderId,
+        order_amount: Number((amount / 100).toFixed(2)),
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: String(customer.id || customer.email || address.phone || orderId)
+            .replace(/[^A-Za-z0-9_-]/g, '')
+            .slice(0, 50),
+          customer_name: customer.name || address.name || 'YogKart Customer',
+          customer_email: customer.email || undefined,
+          customer_phone: customer.phone || address.phone || '9999999999',
+        },
+        order_meta: orderMeta,
+        order_note: 'YogKart order payment',
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.payment_session_id) {
+      throw new Error(data.message || 'Cashfree did not create a payment session');
+    }
     res.json({
-      txnToken: resp.body.txnToken,
+      success: true,
       orderId,
-      mid:      process.env.PAYTM_MID,
-      amount:   (amount / 100).toFixed(2),
+      cashfreeOrderId: data.order_id,
+      paymentSessionId: data.payment_session_id,
+      environment: settings.environment,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Paytm initiation failed', error: err.message });
+    sendGatewayError(res, err, 'Could not create Cashfree order');
   }
 });
 
-// POST /api/payments/paytm/callback  (Paytm redirects here after payment)
-router.post('/paytm/callback', async (req, res) => {
-  const { ORDERID, STATUS, TXNAMOUNT } = req.body;
-  if (STATUS === 'TXN_SUCCESS') {
-    // Update DB
-    if (ORDERID) {
-      await query(`UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`, [ORDERID]);
-    }
-    res.redirect(`${process.env.FRONTEND_URL}/payment/success?orderId=${ORDERID}`);
-  } else {
-    res.redirect(`${process.env.FRONTEND_URL}/payment/failed?orderId=${ORDERID}`);
-  }
-});
-
-// ════════════════════════════════════════════════════════════
-//  PHONEPE
-// ════════════════════════════════════════════════════════════
-
-// POST /api/payments/phonepe/initiate
-router.post('/phonepe/initiate', async (req, res) => {
+router.post('/cashfree/verify', async (req, res) => {
   try {
-    const { amount, address, receipt } = req.body;
-    const merchantTransactionId = receipt || `PPE-${Date.now()}`;
-
-    const payload = {
-      merchantId:            process.env.PHONEPE_MERCHANT_ID,
-      merchantTransactionId,
-      merchantUserId:        'YK_USER_001',
-      amount,                // in paise
-      redirectUrl:           `${process.env.APP_URL}/api/payments/phonepe/callback/${merchantTransactionId}`,
-      redirectMode:          'REDIRECT',
-      callbackUrl:           `${process.env.APP_URL}/api/payments/phonepe/callback/${merchantTransactionId}`,
-      mobileNumber:          address?.phone ?? '',
-      paymentInstrument:     { type: 'PAY_PAGE' }
-    };
-
-    const base64  = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const string  = base64 + '/pg/v1/pay' + process.env.PHONEPE_SALT_KEY;
-    const sha256  = crypto.createHash('sha256').update(string).digest('hex');
-    const checksum = sha256 + '###' + process.env.PHONEPE_SALT_INDEX;
-
-    const ppResp = await fetch('https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay', {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'X-VERIFY':      checksum,
-        'X-MERCHANT-ID': process.env.PHONEPE_MERCHANT_ID,
-      },
-      body: JSON.stringify({ request: base64 })
-    }).then(r => r.json());
-
-    const redirectUrl = ppResp?.data?.instrumentResponse?.redirectInfo?.url;
-    res.json({ redirectUrl, merchantTransactionId });
+    const settings = await getGatewaySettings('cashfree', { requireEnabled: true });
+    const orderId = String(req.body.orderId || '');
+    if (!orderId) return res.status(400).json({ success: false, message: 'Cashfree order ID is required' });
+    const response = await fetch(
+      `${cashfreeBaseUrl(settings.environment)}/orders/${encodeURIComponent(orderId)}`,
+      { headers: cashfreeHeaders(settings) }
+    );
+    const data = await response.json();
+    if (!response.ok || data.order_status !== 'PAID') {
+      return res.status(400).json({ success: false, message: 'Cashfree payment is not completed' });
+    }
+    await query(
+      `UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`,
+      [orderId]
+    );
+    res.json({ success: true, orderId, transactionId: String(data.cf_order_id || '') });
   } catch (err) {
-    res.status(500).json({ message: 'PhonePe initiation failed', error: err.message });
+    sendGatewayError(res, err, 'Cashfree verification failed');
   }
 });
 
-// GET /api/payments/phonepe/callback/:txnId
-router.get('/phonepe/callback/:txnId', async (req, res) => {
-  const { txnId } = req.params;
-  // Verify status via PhonePe status API... (mocking success here)
-  if (txnId) {
-    await query(`UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`, [txnId]);
+router.post('/payu/create-payment', async (req, res) => {
+  try {
+    const settings = await getGatewaySettings('payu', { requireEnabled: true });
+    const { amount, currency = 'INR', receipt, address = {}, customer = {} } = req.body;
+    if (!Number.isInteger(amount) || amount < 100 || currency !== 'INR') {
+      return res.status(400).json({ success: false, message: 'A valid INR amount is required' });
+    }
+
+    const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const frontendUrl = String(settings.returnUrl || process.env.FRONTEND_URL || 'https://yogkart.com').replace(/\/$/, '');
+    const txnid = String(receipt || `YKPU-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    const amountText = (amount / 100).toFixed(2);
+    const productinfo = 'YogKart order payment';
+    const firstname = String(customer.name || address.name || 'YogKart Customer').trim().slice(0, 60);
+    const email = String(customer.email || address.email || 'customer@yogkart.com').trim();
+    const phone = String(customer.phone || address.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
+
+    const fields = {
+      key: settings.clientId,
+      txnid,
+      amount: amountText,
+      productinfo,
+      firstname,
+      email,
+      phone,
+      surl: settings.callbackUrl || `${apiBaseUrl}/api/payments/payu/callback`,
+      furl: settings.callbackUrl || `${apiBaseUrl}/api/payments/payu/callback`,
+      udf1: frontendUrl,
+      service_provider: 'payu_paisa',
+    };
+    fields.hash = payuHash({ ...fields, salt: settings.secretKey });
+
+    res.json({
+      success: true,
+      orderId: txnid,
+      gateway: 'payu',
+      action: payuBaseUrl(settings.environment),
+      method: 'POST',
+      fields,
+      environment: settings.environment,
+    });
+  } catch (err) {
+    sendGatewayError(res, err, 'Could not create PayU payment');
   }
-  res.redirect(`${process.env.FRONTEND_URL}/payment/success?orderId=${txnId}`);
 });
 
-// ════════════════════════════════════════════════════════════
-//  PAYPAL
-// ════════════════════════════════════════════════════════════
+router.post('/payu/callback', async (req, res) => {
+  try {
+    const settings = await getGatewaySettings('payu', { requireEnabled: true });
+    const body = req.body || {};
+    const expected = payuResponseHash({
+      salt: settings.secretKey,
+      additionalCharges: body.additionalCharges,
+      status: body.status,
+      udf1: body.udf1,
+      udf2: body.udf2,
+      udf3: body.udf3,
+      udf4: body.udf4,
+      udf5: body.udf5,
+      email: body.email,
+      firstname: body.firstname,
+      productinfo: body.productinfo,
+      amount: body.amount,
+      txnid: body.txnid,
+      key: body.key,
+    });
+    const isValid = body.hash && expected === body.hash;
+    const paid = isValid && String(body.status).toLowerCase() === 'success';
+    if (paid && body.txnid) {
+      await query(
+        `UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`,
+        [body.txnid]
+      );
+    }
 
-// POST /api/payments/paypal/verify
+    const fallbackUrl = process.env.FRONTEND_URL || 'https://yogkart.com';
+    const returnUrl = String(body.udf1 || settings.returnUrl || fallbackUrl).replace(/\/$/, '');
+    const queryString = new URLSearchParams({
+      gateway: 'payu',
+      status: paid ? 'success' : 'failed',
+      orderId: String(body.txnid || ''),
+      transactionId: String(body.mihpayid || ''),
+    }).toString();
+    return res.redirect(302, `${returnUrl}/checkout?${queryString}`);
+  } catch (err) {
+    sendGatewayError(res, err, 'PayU verification failed');
+  }
+});
+
 router.post('/paypal/verify', async (req, res) => {
   try {
+    const settings = await getGatewaySettings('paypal', { requireEnabled: true });
     const { captureId, payload } = req.body;
-
-    // Get PayPal access token
-    const tokenResp = await fetch('https://api-m.sandbox.paypal.com/v1/oauth2/token', {
-      method:  'POST',
+    const baseUrl = paypalBaseUrl(settings.environment);
+    const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
+      method: 'POST',
       headers: {
-        'Authorization': 'Basic ' + Buffer.from(
-          `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
-        ).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded'
+        Authorization: `Basic ${Buffer.from(`${settings.clientId}:${settings.secretKey}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: 'grant_type=client_credentials'
-    }).then(r => r.json());
+      body: 'grant_type=client_credentials',
+    });
+    const token = await tokenResponse.json();
+    if (!tokenResponse.ok || !token.access_token) throw new Error('PayPal authentication failed');
 
-    // Verify capture
-    const capture = await fetch(
-      `https://api-m.sandbox.paypal.com/v2/payments/captures/${captureId}`,
-      { headers: { 'Authorization': `Bearer ${tokenResp.access_token}` } }
-    ).then(r => r.json());
-
-    if (capture.status === 'COMPLETED') {
-      const orderId = payload?.receipt || `YK-PP-${Date.now()}`;
-      // Save to DB, mark as paid
-      if (orderId) {
-        await query(`UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`, [orderId]);
-      }
-      res.json({ success: true, orderId });
-    } else {
-      res.status(400).json({ success: false, message: 'PayPal capture not completed' });
+    const captureResponse = await fetch(
+      `${baseUrl}/v2/payments/captures/${encodeURIComponent(captureId)}`,
+      { headers: { Authorization: `Bearer ${token.access_token}` } }
+    );
+    const capture = await captureResponse.json();
+    if (!captureResponse.ok || capture.status !== 'COMPLETED') {
+      return res.status(400).json({ success: false, message: 'PayPal capture not completed' });
     }
+    const orderId = payload?.receipt || `YK-PP-${Date.now()}`;
+    await query(
+      `UPDATE orders SET status = 'confirmed', payment_status = 'paid' WHERE id = $1`,
+      [orderId]
+    );
+    res.json({ success: true, orderId });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    sendGatewayError(res, err, 'PayPal verification failed');
   }
 });
 
 module.exports = router;
-
-// ── In app.js / server.js: ────────────────────────────────────────────────
-// const paymentRoutes = require('./routes/payments');
-// app.use('/api/payments', paymentRoutes);
