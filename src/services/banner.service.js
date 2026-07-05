@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS banners (
   is_active BOOLEAN DEFAULT TRUE,
   image_fit VARCHAR(20) DEFAULT 'cover',
   image_opacity NUMERIC DEFAULT 0.2,
+  settings JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -76,6 +77,7 @@ const ensureBannersSchema = async () => {
     // Add columns if they do not exist
     await query(`ALTER TABLE banners ADD COLUMN IF NOT EXISTS image_fit VARCHAR(20) DEFAULT 'cover'`);
     await query(`ALTER TABLE banners ADD COLUMN IF NOT EXISTS image_opacity NUMERIC DEFAULT 0.2`);
+    await query(`ALTER TABLE banners ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb`);
     
     // Check if banners table is empty
     const checkRes = await query('SELECT COUNT(*)::integer FROM banners');

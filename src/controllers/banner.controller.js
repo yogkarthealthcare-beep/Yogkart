@@ -36,7 +36,7 @@ const createBanner = async (req, res) => {
       cta_text, cta_link, sort_order, is_active,
       product_id, product_name, product_price, product_image,
       coupon_code, coupon_discount, coupon_expiry,
-      image_fit, image_opacity
+      image_fit, image_opacity, settings
     } = req.body;
 
     if (!type || !title) return badRequest(res, 'type aur title required hain');
@@ -48,8 +48,8 @@ const createBanner = async (req, res) => {
       `INSERT INTO banners
         (type, title, subtitle, badge, bg_color, image, cta_text, cta_link, sort_order, is_active,
          product_id, product_name, product_price, product_image,
-         coupon_code, coupon_discount, coupon_expiry, image_fit, image_opacity)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         coupon_code, coupon_discount, coupon_expiry, image_fit, image_opacity, settings)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING *`,
       [
         type, title, subtitle || null, badge || null,
@@ -61,7 +61,8 @@ const createBanner = async (req, res) => {
         coupon_code || null, coupon_discount || null,
         coupon_expiry || null,
         image_fit || 'cover',
-        image_opacity ?? 0.2
+        image_opacity ?? 0.2,
+        typeof settings === 'object' && settings ? JSON.stringify(settings) : '{}'
       ]
     );
     return success(res, { banner: result.rows[0] }, 'Banner created');
@@ -80,7 +81,7 @@ const updateBanner = async (req, res) => {
       cta_text, cta_link, sort_order, is_active,
       product_id, product_name, product_price, product_image,
       coupon_code, coupon_discount, coupon_expiry,
-      image_fit, image_opacity
+      image_fit, image_opacity, settings
     } = req.body;
 
     const result = await query(
@@ -89,9 +90,9 @@ const updateBanner = async (req, res) => {
         cta_text=$7, cta_link=$8, sort_order=$9, is_active=$10,
         product_id=$11, product_name=$12, product_price=$13, product_image=$14,
         coupon_code=$15, coupon_discount=$16, coupon_expiry=$17,
-        image_fit=$18, image_opacity=$19,
+        image_fit=$18, image_opacity=$19, settings=$20,
         updated_at=NOW()
-       WHERE id=$20 RETURNING *`,
+       WHERE id=$21 RETURNING *`,
       [
         type, title, subtitle || null, badge || null,
         bg_color || '#064e3b', image || null,
@@ -103,6 +104,7 @@ const updateBanner = async (req, res) => {
         coupon_expiry || null,
         image_fit || 'cover',
         image_opacity ?? 0.2,
+        typeof settings === 'object' && settings ? JSON.stringify(settings) : '{}',
         id,
       ]
     );
