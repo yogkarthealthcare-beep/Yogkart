@@ -47,7 +47,7 @@ const getCategories = async (req, res) => {
 // ── POST /api/admin/categories ─────────────────────────
 const createCategory = async (req, res) => {
   try {
-    const { name, icon, color, sort_order = 0 } = req.body;
+    const { name, icon, color, sort_order = 0, parent_id, badge, banner_image, is_featured = false, show_in_menu = true } = req.body;
     const image = categoryImageFromBody(req.body);
 
     if (!name) return error(res, 'Category name is required', 400);
@@ -57,10 +57,22 @@ const createCategory = async (req, res) => {
     const id = rawId.slice(0, 50);
 
     const result = await query(
-      `INSERT INTO categories (id, name, icon, color, image, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO categories (id, name, icon, color, image, sort_order, parent_id, badge, banner_image, is_featured, show_in_menu)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [id, name.trim(), icon || null, color || null, image || null, parseInt(sort_order)]
+      [
+        id, 
+        name.trim(), 
+        icon || null, 
+        color || null, 
+        image || null, 
+        parseInt(sort_order),
+        parent_id || null,
+        badge || null,
+        banner_image || null,
+        Boolean(is_featured),
+        Boolean(show_in_menu)
+      ]
     );
 
     return created(res, { category: result.rows[0] }, 'Category created successfully');
@@ -74,20 +86,24 @@ const createCategory = async (req, res) => {
 // ── PUT /api/admin/categories/:id ─────────────────────
 const updateCategory = async (req, res) => {
   try {
-    const { name, icon, color, sort_order, is_active } = req.body;
+    const { name, icon, color, sort_order, is_active, parent_id, badge, banner_image, is_featured, show_in_menu } = req.body;
     const image = categoryImageFromBody(req.body);
 
     const updates = [];
     const params = [];
     let idx = 1;
 
-    // categories table mein `updated_at` column nahi hai (schema check)
-    if (name       !== undefined) { updates.push(`name = $${idx++}`);       params.push(name.trim()); }
-    if (icon       !== undefined) { updates.push(`icon = $${idx++}`);       params.push(icon); }
-    if (color      !== undefined) { updates.push(`color = $${idx++}`);      params.push(color); }
-    if (image      !== undefined) { updates.push(`image = $${idx++}`);      params.push(image || null); }
-    if (sort_order !== undefined) { updates.push(`sort_order = $${idx++}`); params.push(parseInt(sort_order)); }
-    if (is_active  !== undefined) { updates.push(`is_active = $${idx++}`);  params.push(Boolean(is_active)); }
+    if (name         !== undefined) { updates.push(`name = $${idx++}`);         params.push(name.trim()); }
+    if (icon         !== undefined) { updates.push(`icon = $${idx++}`);         params.push(icon); }
+    if (color        !== undefined) { updates.push(`color = $${idx++}`);        params.push(color); }
+    if (image        !== undefined) { updates.push(`image = $${idx++}`);        params.push(image || null); }
+    if (sort_order   !== undefined) { updates.push(`sort_order = $${idx++}`);   params.push(parseInt(sort_order)); }
+    if (is_active    !== undefined) { updates.push(`is_active = $${idx++}`);    params.push(Boolean(is_active)); }
+    if (parent_id    !== undefined) { updates.push(`parent_id = $${idx++}`);    params.push(parent_id || null); }
+    if (badge        !== undefined) { updates.push(`badge = $${idx++}`);        params.push(badge || null); }
+    if (banner_image !== undefined) { updates.push(`banner_image = $${idx++}`); params.push(banner_image || null); }
+    if (is_featured  !== undefined) { updates.push(`is_featured = $${idx++}`);  params.push(Boolean(is_featured)); }
+    if (show_in_menu !== undefined) { updates.push(`show_in_menu = $${idx++}`);  params.push(Boolean(show_in_menu)); }
 
     if (!updates.length) return error(res, 'No fields to update', 400);
 
