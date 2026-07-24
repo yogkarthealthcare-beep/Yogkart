@@ -15,6 +15,58 @@ const PRODUCT_FIELDS = `
   p.created_at, p.updated_at
 `;
 
+const ACTIVE_CATEGORY_JOIN = 'LEFT JOIN categories c ON c.id = p.category_id';
+const ACTIVE_CATEGORY_CONDITION = '(p.category_id IS NULL OR c.is_active = TRUE)';
+const REGULATED_CATEGORY_TERMS = [
+  'medicine',
+  'medicines',
+  'prescription',
+  'ayurvedic',
+  'tablet',
+  'tablets',
+  'capsule',
+  'capsules',
+  'syrup',
+  'syrups',
+  'powder',
+  'powders',
+  'food',
+  'foods',
+  'grocery',
+  'groceries',
+  'supplement',
+  'supplements',
+  'vitamin',
+  'vitamins',
+  'nutrition',
+  'protein',
+  'drink',
+  'drinks',
+  'juice',
+  'juices',
+  'superfood',
+  'superfoods',
+  'pharmacy',
+  'pharma',
+  'healthcare',
+  'health',
+  'diabetes',
+  'diabetic',
+  'first-aid',
+  'medical'
+];
+const REGULATED_CATEGORY_PATTERN = `(^|[-_\\s&/])(${REGULATED_CATEGORY_TERMS.join('|')})([-_\\s&/]|$)|healthcare`;
+const PUBLIC_CATEGORY_CONDITION = `(
+  p.category_id IS NULL OR (
+    COALESCE(c.id, '') !~* '${REGULATED_CATEGORY_PATTERN}'
+    AND COALESCE(c.name, '') !~* '${REGULATED_CATEGORY_PATTERN}'
+  )
+)`;
+const PUBLIC_CATEGORY_FIELDS_CONDITION = `(
+  COALESCE(c.id, '') !~* '${REGULATED_CATEGORY_PATTERN}'
+  AND COALESCE(c.name, '') !~* '${REGULATED_CATEGORY_PATTERN}'
+)`;
+
 // ── GET /api/products ──────────────────────────────────
 const getProducts = async (req, res) => {
   try {
@@ -25,7 +77,7 @@ const getProducts = async (req, res) => {
       featured, new: isNew, bestseller,
     } = req.query;
 
-    const conditions = ['p.is_active = TRUE'];
+    const conditions = ['p.is_active = TRUE', ACTIVE_CATEGORY_CONDITION, PUBLIC_CATEGORY_CONDITION];
     const params = [];
     let paramIdx = 1;
 
@@ -90,7 +142,7 @@ const getProducts = async (req, res) => {
 
     // Count
     const countResult = await query(
-      `SELECT COUNT(*) FROM products p ${where}`, params
+      `SELECT COUNT(*) FROM products p ${ACTIVE_CATEGORY_JOIN} ${where}`, params
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -102,6 +154,7 @@ const getProducts = async (req, res) => {
     const result = await query(
       `SELECT ${PRODUCT_FIELDS} ${searchRank}
        FROM products p
+       ${ACTIVE_CATEGORY_JOIN}
        ${where}
        ORDER BY ${orderBy}
        LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
@@ -119,7 +172,9 @@ const getProducts = async (req, res) => {
 const getProduct = async (req, res) => {
   try {
     const result = await query(
-      `SELECT ${PRODUCT_FIELDS} FROM products p WHERE p.slug = $1 AND p.is_active = TRUE`,
+      `SELECT ${PRODUCT_FIELDS} FROM products p
+       ${ACTIVE_CATEGORY_JOIN}
+       WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
       [req.params.slug]
     );
     if (result.rows.length === 0) return notFound(res, 'Product not found');
@@ -133,14 +188,19 @@ const getProduct = async (req, res) => {
 const getRelated = async (req, res) => {
   try {
     const product = await query(
-      'SELECT id, category_id FROM products WHERE slug = $1', [req.params.slug]
+      `SELECT p.id, p.category_id
+       FROM products p
+       ${ACTIVE_CATEGORY_JOIN}
+       WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
+      [req.params.slug]
     );
     if (product.rows.length === 0) return notFound(res, 'Product not found');
 
     const { id, category_id } = product.rows[0];
     const result = await query(
       `SELECT ${PRODUCT_FIELDS} FROM products p
-       WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE
+       ${ACTIVE_CATEGORY_JOIN}
+       WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
        ORDER BY p.rating DESC LIMIT 6`,
       [category_id, id]
     );
@@ -157,8 +217,9 @@ const getCategories = async (req, res) => {
       `SELECT c.*, COUNT(p.id)::int AS count
        FROM categories c
        LEFT JOIN products p ON p.category_id = c.id AND p.is_active = TRUE
-       WHERE c.is_active = TRUE
+       WHERE c.is_active = TRUE AND ${PUBLIC_CATEGORY_FIELDS_CONDITION}
        GROUP BY c.id
+       HAVING COUNT(p.id) > 0
        ORDER BY c.sort_order`,
       []
     );
@@ -174,7 +235,8 @@ const getFeatured = async (req, res) => {
     // Pehle is_featured = TRUE wale lo
     let result = await query(
       `SELECT ${PRODUCT_FIELDS} FROM products p
-       WHERE p.is_featured = TRUE AND p.is_active = TRUE
+       ${ACTIVE_CATEGORY_JOIN}
+       WHERE p.is_featured = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
        ORDER BY p.review_count DESC LIMIT 8`,
       []
     );
@@ -183,7 +245,8 @@ const getFeatured = async (req, res) => {
     if (result.rows.length === 0) {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
-         WHERE p.is_active = TRUE
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.review_count DESC, p.created_at DESC
          LIMIT 8`,
         []
@@ -203,7 +266,8 @@ const getBestSellers = async (req, res) => {
     // Pehle is_best_seller = TRUE wale lo
     let result = await query(
       `SELECT ${PRODUCT_FIELDS} FROM products p
-       WHERE p.is_best_seller = TRUE AND p.is_active = TRUE
+       ${ACTIVE_CATEGORY_JOIN}
+       WHERE p.is_best_seller = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
        ORDER BY p.review_count DESC LIMIT 8`,
       []
     );
@@ -212,7 +276,8 @@ const getBestSellers = async (req, res) => {
     if (result.rows.length === 0) {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
-         WHERE p.is_active = TRUE
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.review_count DESC, p.rating DESC
          LIMIT 8`,
         []
@@ -232,27 +297,27 @@ const getBanners = async (req, res) => {
   const banners = [
     {
       id: 1,
-      title: "Nature's Best. Science Perfected.",
-      subtitle: 'Premium Ayurvedic & Healthcare Products',
+      title: 'Natural Daily Essentials',
+      subtitle: 'Hair care, skin care, and lifestyle accessories',
       cta: 'Shop Now', ctaLink: '/products',
-      image: 'https://images.pexels.com/photos/3735149/pexels-photo-3735149.jpeg?w=1200',
-      bgColor: '#064e3b', badge: 'Upto 40% OFF',
+      image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=1200&q=80',
+      bgColor: '#064e3b', badge: 'New Collection',
     },
     {
       id: 2,
-      title: 'Boost Your Immunity Naturally',
-      subtitle: 'Handpicked Herbs & Supplements',
-      cta: 'Explore', ctaLink: '/products?category=supplements',
-      image: 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?w=1200',
-      bgColor: '#1e3a5f', badge: 'New Arrivals',
+      title: 'Neem Wood Grooming',
+      subtitle: 'Reusable wooden combs and everyday care accessories',
+      cta: 'Explore', ctaLink: '/products?category=wooden-combs',
+      image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&q=80',
+      bgColor: '#1e3a5f', badge: 'Eco-Friendly',
     },
     {
       id: 3,
-      title: 'Pure. Organic. Certified.',
-      subtitle: 'Trusted by 1 Lakh+ Customers',
-      cta: 'Shop Vitamins', ctaLink: '/products?category=vitamins',
-      image: 'https://images.pexels.com/photos/3683053/pexels-photo-3683053.jpeg?w=1200',
-      bgColor: '#3b1f5e', badge: null,
+      title: 'Beauty Tools for Simple Routines',
+      subtitle: 'Reusable, practical, and certification-light essentials',
+      cta: 'Discover More', ctaLink: '/products?category=beauty-tools',
+      image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1200&q=80',
+      bgColor: '#3b1f5e', badge: 'Lifestyle Picks',
     },
   ];
   return success(res, { banners });

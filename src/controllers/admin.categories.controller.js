@@ -22,7 +22,16 @@ const categoryImageFromBody = (body) => {
 // ── GET /api/admin/categories ──────────────────────────
 const getCategories = async (req, res) => {
   try {
-    const { include_inactive = 'false' } = req.query;
+    await query(`
+      ALTER TABLE categories
+        ADD COLUMN IF NOT EXISTS parent_id VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS badge VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS banner_image VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS show_in_menu BOOLEAN DEFAULT TRUE
+    `);
+
+    const { include_inactive = 'true' } = req.query;
 
     const where = include_inactive === 'true' ? '' : 'WHERE c.is_active = TRUE';
 
@@ -41,6 +50,31 @@ const getCategories = async (req, res) => {
   } catch (err) {
     console.error('getCategories error:', err);
     return error(res, 'Failed to fetch categories');
+  }
+};
+
+const toggleCategory = async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE categories
+       SET is_active = NOT is_active,
+           show_in_menu = NOT is_active
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id]
+    );
+
+    if (!result.rows.length) return notFound(res, 'Category not found');
+
+    const category = result.rows[0];
+    return success(
+      res,
+      { category },
+      `Category '${category.name}' ${category.is_active ? 'shown' : 'hidden'}`
+    );
+  } catch (err) {
+    console.error('toggleCategory error:', err);
+    return error(res, 'Failed to toggle category status');
   }
 };
 
@@ -151,4 +185,4 @@ const deleteCategory = async (req, res) => {
   }
 };
 
-module.exports = { getCategories, createCategory, updateCategory, deleteCategory };
+module.exports = { getCategories, createCategory, updateCategory, deleteCategory, toggleCategory };

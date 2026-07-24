@@ -115,7 +115,12 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 
 ALTER TABLE categories
-  ADD COLUMN IF NOT EXISTS image TEXT;
+  ADD COLUMN IF NOT EXISTS image TEXT,
+  ADD COLUMN IF NOT EXISTS parent_id VARCHAR(50),
+  ADD COLUMN IF NOT EXISTS badge VARCHAR(50),
+  ADD COLUMN IF NOT EXISTS banner_image VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS show_in_menu BOOLEAN DEFAULT TRUE;
 
 -- ── Products ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS products (
@@ -330,6 +335,47 @@ DROP TRIGGER IF EXISTS trg_coupons_updated ON coupons;
 CREATE TRIGGER trg_coupons_updated
   BEFORE UPDATE ON coupons
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Bulk communication campaigns
+CREATE TABLE IF NOT EXISTS bulk_campaigns (
+  id SERIAL PRIMARY KEY,
+  campaign_name VARCHAR(160) NOT NULL,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('whatsapp', 'email')),
+  subject TEXT,
+  message_content TEXT NOT NULL,
+  total_imported INTEGER NOT NULL DEFAULT 0,
+  valid_count INTEGER NOT NULL DEFAULT 0,
+  invalid_count INTEGER NOT NULL DEFAULT 0,
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  duplicate_count INTEGER NOT NULL DEFAULT 0,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  provider VARCHAR(60),
+  idempotency_key VARCHAR(120),
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS bulk_campaign_recipients (
+  id SERIAL PRIMARY KEY,
+  campaign_id INTEGER NOT NULL REFERENCES bulk_campaigns(id) ON DELETE CASCADE,
+  name VARCHAR(160),
+  destination VARCHAR(255) NOT NULL,
+  variable_1 TEXT,
+  variable_2 TEXT,
+  remarks TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  reason TEXT,
+  provider_message_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_type_created ON bulk_campaigns(type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_idempotency ON bulk_campaigns(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_bulk_recipients_campaign ON bulk_campaign_recipients(campaign_id);
 
 CREATE TABLE IF NOT EXISTS database_backup_history (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

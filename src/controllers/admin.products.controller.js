@@ -292,6 +292,90 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+const normalizeProductIds = (ids) => {
+  if (!Array.isArray(ids)) return [];
+  return [...new Set(
+    ids
+      .map(id => Number(id))
+      .filter(id => Number.isInteger(id) && id > 0)
+  )];
+};
+
+const bulkDeactivateProducts = async (req, res) => {
+  try {
+    const ids = normalizeProductIds(req.body.ids);
+    if (!ids.length) return error(res, 'ids array required', 400);
+
+    const existing = await query('SELECT id FROM products WHERE id = ANY($1::int[])', [ids]);
+    const existingIds = existing.rows.map(row => Number(row.id));
+    const result = existingIds.length
+      ? await query(
+          `UPDATE products
+           SET is_active = FALSE, updated_at = NOW()
+           WHERE id = ANY($1::int[])
+           RETURNING id`,
+          [existingIds]
+        )
+      : { rows: [] };
+
+    const updatedIds = result.rows.map(row => Number(row.id));
+    const failed = ids
+      .filter(id => !updatedIds.includes(id))
+      .map(id => ({ id, reason: existingIds.includes(id) ? 'Not updated' : 'Product not found' }));
+
+    return success(res, {
+      requested: ids.length,
+      deactivated: updatedIds.length,
+      failed,
+    }, failed.length
+      ? `Deactivated ${updatedIds.length} products. ${failed.length} failed.`
+      : `Deactivated ${updatedIds.length} products successfully`);
+  } catch (err) {
+    console.error('bulkDeactivateProducts error:', err);
+    return error(res, 'Failed to bulk deactivate products');
+  }
+};
+
+const bulkDeleteProducts = async (req, res) => {
+  try {
+    const ids = normalizeProductIds(req.body.ids);
+    if (!ids.length) return error(res, 'ids array required', 400);
+
+    const existing = await query('SELECT id FROM products WHERE id = ANY($1::int[])', [ids]);
+    const existingIds = existing.rows.map(row => Number(row.id));
+    const blocked = await query(
+      'SELECT DISTINCT product_id AS id FROM order_items WHERE product_id = ANY($1::int[])',
+      [existingIds]
+    );
+    const blockedIds = blocked.rows.map(row => Number(row.id));
+    const deletableIds = existingIds.filter(id => !blockedIds.includes(id));
+    const result = deletableIds.length
+      ? await query('DELETE FROM products WHERE id = ANY($1::int[]) RETURNING id', [deletableIds])
+      : { rows: [] };
+
+    const deletedIds = result.rows.map(row => Number(row.id));
+    const failed = ids
+      .filter(id => !deletedIds.includes(id))
+      .map(id => {
+        if (!existingIds.includes(id)) return { id, reason: 'Product not found' };
+        if (blockedIds.includes(id)) return { id, reason: 'Product has order history' };
+        return { id, reason: 'Not deleted' };
+      });
+
+    const status = failed.length && deletedIds.length ? 207 : 200;
+    return success(res, {
+      requested: ids.length,
+      deleted: deletedIds.length,
+      failed,
+    }, failed.length
+      ? `Deleted ${deletedIds.length} products. ${failed.length} failed.`
+      : `Deleted ${deletedIds.length} products successfully`, status);
+  } catch (err) {
+    console.error('bulkDeleteProducts error:', err);
+    return error(res, 'Failed to bulk delete products');
+  }
+};
+
 const toggleProduct = async (req, res) => {
   try {
     const result = await query(
@@ -332,6 +416,8 @@ module.exports = {
   updateProduct,
   generateSeoPreview,
   deleteProduct,
+  bulkDeactivateProducts,
+  bulkDeleteProducts,
   toggleProduct,
   bulkUpdateStock,
 };

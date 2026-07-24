@@ -38,11 +38,14 @@ const getSocialPreview = async (req, res) => {
   try {
     const result = await query(
       `SELECT
-        id, name, slug, brand, price, original_price, discount, rating,
-        review_count, stock, images, thumbnail, description,
-        key_benefits
-       FROM products
-       WHERE slug = $1 AND is_active = TRUE
+        p.id, p.name, p.slug, p.brand, p.price, p.original_price, p.discount, p.rating,
+        p.review_count, p.stock, p.images, p.thumbnail, p.description,
+        p.key_benefits
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.slug = $1
+         AND p.is_active = TRUE
+         AND (p.category_id IS NULL OR c.is_active = TRUE)
        LIMIT 1`,
       [req.params.slug]
     );

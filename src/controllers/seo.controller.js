@@ -8,8 +8,12 @@ const escapeXml = (value) => String(value || '')
 const sitemap = async (_req, res) => {
   try {
     const result = await query(
-      `SELECT slug, canonical_url, updated_at FROM products
-       WHERE is_active = TRUE ORDER BY updated_at DESC`
+      `SELECT p.slug, p.canonical_url, p.updated_at
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.is_active = TRUE
+         AND (p.category_id IS NULL OR c.is_active = TRUE)
+       ORDER BY p.updated_at DESC`
     );
     const urls = [
       { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'daily' },

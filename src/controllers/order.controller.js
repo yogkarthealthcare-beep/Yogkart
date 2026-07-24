@@ -82,7 +82,12 @@ const placeOrder = async (req, res) => {
     for (const item of items) {
       // Fetch product snapshot
       const productRes = await client.query(
-        'SELECT id, name, thumbnail, pack_size, price, stock FROM products WHERE id = $1',
+        `SELECT p.id, p.name, p.thumbnail, p.pack_size, p.price, p.stock
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.id = $1
+           AND p.is_active = TRUE
+           AND (p.category_id IS NULL OR c.is_active = TRUE)`,
         [item.product_id]
       );
       if (productRes.rows.length === 0) throw new Error(`Product ${item.product_id} not found`);

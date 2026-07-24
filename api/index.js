@@ -4,6 +4,7 @@ const { testConnection } = require('../src/config/database');
 const { ensurePaymentGatewaySchema } = require('../src/services/paymentGatewaySettings.service');
 const { ensureProductSeoSchema } = require('../src/services/productSeo.service');
 const { ensureBannersSchema } = require('../src/services/banner.service');
+const { ensureBulkCommunicationSchema } = require('../src/services/bulkCommunication.service');
 
 let dbConnected = false;
 
@@ -44,6 +45,7 @@ module.exports = async (req, res) => {
       await ensurePaymentGatewaySchema();
       await ensureProductSeoSchema();
       await ensureBannersSchema();
+      await ensureBulkCommunicationSchema();
       dbConnected = true;
     }
     return app(req, res);

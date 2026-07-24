@@ -10,6 +10,7 @@
  */
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { adminProtect, superAdminOnly } = require('../middleware/admin.auth.middleware');
 
@@ -21,11 +22,21 @@ const usersCtrl     = require('../controllers/admin.users.controller');
 const inventoryCtrl = require('../controllers/admin.inventory.controller');
 const analyticsCtrl = require('../controllers/admin.analytics.controller');
 const categoriesCtrl = require('../controllers/admin.categories.controller');
+const communicationCtrl = require('../controllers/admin.communication.controller');
 const paymentsCtrl  = require('../controllers/admin.payments.controller');
 const couponsCtrl   = require('../controllers/admin.coupons.controller');
 const databaseCtrl  = require('../controllers/admin.database.controller');
 const credentialsRoutes = require('./admin.credentials.routes');
 const paymentGatewaysCtrl = require('../controllers/admin.payment-gateways.controller');
+
+const communicationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  handler: (req, res) => res.status(429).json({
+    success: false,
+    message: 'Bulk communication rate limit reached. Please try again later.',
+  }),
+});
 
 // ── All admin routes → admin JWT required ──────────────
 router.use(adminProtect);
@@ -44,6 +55,8 @@ router.delete('/orders/:id',       ordersCtrl.cancelOrder);
 // ── Products ──────────────────────────────────────────
 // IMPORTANT: /products/bulk-stock PEHLE, /products/:id BAAD MEIN
 router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);  // ← PEHLE
+router.post('/products/bulk-deactivate', productsCtrl.bulkDeactivateProducts);
+router.post('/products/bulk-delete',     productsCtrl.bulkDeleteProducts);
 router.post('/products/seo/generate',     productsCtrl.generateSeoPreview);
 router.get('/products',                  productsCtrl.getProducts);
 router.get('/products/:id',              productsCtrl.getProduct);
@@ -57,6 +70,12 @@ router.get('/categories',        categoriesCtrl.getCategories);
 router.post('/categories',       categoriesCtrl.createCategory);
 router.put('/categories/:id',    categoriesCtrl.updateCategory);
 router.delete('/categories/:id', categoriesCtrl.deleteCategory);
+router.patch('/categories/:id/toggle', categoriesCtrl.toggleCategory);
+
+// Bulk Communication
+router.get('/communication/campaigns', communicationCtrl.getCampaigns);
+router.get('/communication/campaigns/:id', communicationCtrl.getCampaignReport);
+router.post('/communication/send', communicationLimiter, communicationCtrl.sendCampaign);
 
 // ── Users ─────────────────────────────────────────────
 // IMPORTANT: /users/stats PEHLE, /users/:id BAAD MEIN

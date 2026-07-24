@@ -15,7 +15,10 @@ const getWishlist = async (req, res) => {
       `SELECT ${PRODUCT_FIELDS}, w.created_at AS wishlisted_at
        FROM wishlists w
        JOIN products p ON p.id = w.product_id
-       WHERE w.user_id = $1 AND p.is_active = TRUE
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE w.user_id = $1
+         AND p.is_active = TRUE
+         AND (p.category_id IS NULL OR c.is_active = TRUE)
        ORDER BY w.created_at DESC`,
       [req.user.id]
     );
@@ -42,6 +45,17 @@ const toggleWishlist = async (req, res) => {
         [req.user.id, productId]);
       return success(res, { wishlisted: false }, 'Removed from wishlist');
     } else {
+      const product = await query(
+        `SELECT p.id
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.id = $1
+           AND p.is_active = TRUE
+           AND (p.category_id IS NULL OR c.is_active = TRUE)`,
+        [productId]
+      );
+      if (!product.rows.length) return error(res, 'Product is not available', 404);
+
       // Add
       await query('INSERT INTO wishlists (user_id, product_id) VALUES ($1, $2)',
         [req.user.id, productId]);
