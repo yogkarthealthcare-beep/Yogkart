@@ -1,6 +1,7 @@
 const { query, getClient } = require('../config/database');
 const { success, created, notFound, error, paginated, forbidden } = require('../utils/response');
 const { calculateDiscount, normalizeCode } = require('./coupon.controller');
+const invoiceService = require('../services/invoice.service');
 
 const generateOrderId = () => {
   const ts = Date.now().toString().slice(-8);
@@ -80,7 +81,6 @@ const placeOrder = async (req, res) => {
 
     // Insert order items & update stock
     for (const item of items) {
-      // Fetch product snapshot
       const productRes = await client.query(
         `SELECT p.id, p.name, p.thumbnail, p.pack_size, p.price, p.stock
          FROM products p
@@ -100,9 +100,9 @@ const placeOrder = async (req, res) => {
       const itemTotal = product.price * item.quantity;
 
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, name, thumbnail, pack_size, quantity, price, total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [orderId, product.id, product.name, product.thumbnail, product.pack_size, item.quantity, product.price, itemTotal]
+        `INSERT INTO order_items (order_id, product_id, variant_id, name, thumbnail, pack_size, quantity, price, total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [orderId, product.id, item.variant_id || null, product.name, product.thumbnail, item.pack_size || product.pack_size, item.quantity, product.price, itemTotal]
       );
 
       // Decrement stock
@@ -123,6 +123,45 @@ const placeOrder = async (req, res) => {
     return error(res, err.message || 'Failed to place order');
   } finally {
     client.release();
+  }
+};
+
+// ── GET /api/orders/:id/invoice ───────────────────────
+const downloadInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let order;
+
+    if (req.user.role === 'admin') {
+      const resOrder = await query(
+        `SELECT o.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
+          json_agg(json_build_object(
+            'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
+            'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
+            'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
+          )) AS items
+         FROM orders o
+         JOIN users u ON o.user_id = u.id
+         LEFT JOIN order_items oi ON oi.order_id = o.id
+         WHERE o.id = $1
+         GROUP BY o.id, u.id`,
+        [id]
+      );
+      order = resOrder.rows[0];
+    } else {
+      order = await getOrderById(id, req.user.id);
+    }
+
+    if (!order) return notFound(res, 'Order not found');
+
+    const pdfBuffer = await invoiceService.generateInvoicePdf(order, order.items || []);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice_${order.id}.pdf`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('downloadInvoice error:', err);
+    return error(res, 'Failed to generate invoice PDF');
   }
 };
 
@@ -159,12 +198,11 @@ const getOrders = async (req, res) => {
       params
     );
 
-    // ordersRes rows mein items field normalize karo
     const orders = ordersRes.rows.map(order => ({
       ...order,
       items: (order.items ?? []).map(item => ({
         ...item,
-        product_name: item.name,  // frontend product_name expect karta hai
+        product_name: item.name,
       }))
     }));
     return success(res, orders, 'Orders fetched');
@@ -242,4 +280,4 @@ const getOrderById = async (orderId, userId) => {
   return result.rows[0] || null;
 };
 
-module.exports = { placeOrder, getOrders, getOrder, cancelOrder };
+module.exports = { placeOrder, getOrders, getOrder, cancelOrder, downloadInvoice };

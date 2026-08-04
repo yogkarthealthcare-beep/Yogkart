@@ -7,11 +7,16 @@ async function runMigrations() {
   const client = await pool.connect();
   try {
     console.log('🚀 Running migrations...');
-    const sql = fs.readFileSync(
-      path.join(__dirname, 'schema.sql'), 'utf8'
-    );
-    await client.query(sql);
-    console.log('✅ Migrations completed successfully!');
+    const migrationFiles = fs.readdirSync(__dirname)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
+
+    for (const file of migrationFiles) {
+      console.log(`📜 Running ${file}...`);
+      const sql = fs.readFileSync(path.join(__dirname, file), 'utf8');
+      await client.query(sql);
+    }
+    console.log('✅ All migrations completed successfully!');
   } catch (err) {
     console.error('❌ Migration failed:', err.message);
     process.exit(1);

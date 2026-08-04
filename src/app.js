@@ -19,7 +19,19 @@ const adminAuthRoutes    = require('./routes/admin.auth.routes');
 const diseaseRoutes      = require('./routes/disease.routes');
 const reminderRoutes     = require('./routes/reminder.routes');
 const stepTrackingRoutes = require('./routes/stepTracking.routes');
+const cartRoutes        = require('./routes/cart.routes');
+const teacherRoutes     = require('./routes/teacher.routes');
+const teacherBookingRoutes = require('./routes/teacherBooking.routes');
+const courseRoutes         = require('./routes/course.routes');
+const certificateRoutes    = require('./routes/certificate.routes');
+const healthRoutes         = require('./routes/health.routes');
+const fitnessCenterRoutes  = require('./routes/fitnessCenter.routes');
+const communityRoutes      = require('./routes/community.routes');
 const bannerRoutes       = require('./routes/banner.routes');   // ✅ Banner routes
+const subscriptionRoutes   = require('./routes/subscription.routes');
+const adminSubscriptionRoutes = require('./routes/admin.subscription.routes');
+const publicSeoRoutes      = require('./routes/seo.routes');
+const adminSeoRoutes       = require('./routes/admin.seo.routes');
 const seoController      = require('./controllers/seo.controller');
 const socialShareController = require('./controllers/socialShare.controller');
 
@@ -57,12 +69,10 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    console.warn(`CORS blocked: ${origin}`);
-    return callback(new Error(`CORS blocked: ${origin}`));
+    return callback(null, origin);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Silent', 'X-Skip-Loading'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Silent', 'X-Skip-Loading', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Allow-Headers'],
   credentials: true,
 }));
 
@@ -100,22 +110,41 @@ app.get('/health', (req, res) => {
     timestamp:   new Date().toISOString(),
   });
 });
-app.get('/sitemap.xml', seoController.sitemap);
+app.get('/sitemap-index.xml', seoController.sitemapIndex);
+app.get('/sitemap.xml', seoController.sitemapIndex);
+app.get('/sitemap-:locale.xml', seoController.localeSitemap);
+app.get('/image-sitemap.xml', seoController.imageSitemap);
+app.get('/video-sitemap.xml', seoController.videoSitemap);
 app.get('/robots.txt', seoController.robots);
+app.get('/llms.txt', seoController.llmsTxt);
+app.get('/llms-full.txt', seoController.llmsTxt);
 app.get('/share/products/:slug', socialShareController.getSocialPreview);
 
 // ── Routes ────────────────────────────────────────────
+app.use('/seo',                          publicSeoRoutes);
 app.use('/api/auth',       authLimiter,  authRoutes);
 app.use('/api/admin-auth', authLimiter,  adminAuthRoutes);
 app.use('/api/admin',                    adminRoutes);
+app.use('/api/seo',                      publicSeoRoutes);
+app.use('/api/admin/seo',                adminSeoRoutes);
 app.use('/api/products',                 productRoutes);
 app.use('/api/categories',               categoryRoutes);
 app.use('/api/orders',                   orderRoutes);
+app.use('/api/cart',                     cartRoutes);
 app.use('/api/wishlist',                 wishlistRoutes);
 app.use('/api/addresses',                addressRoutes);
 app.use('/api/payments',                 paymentRoutes);
 app.use('/api/coupons',                  couponRoutes);
 app.use('/api/banners',                  bannerRoutes);         // ✅ Banner routes
+app.use('/api/teachers',                 teacherRoutes);
+app.use('/api/teacher-bookings',         teacherBookingRoutes);
+app.use('/api/courses',                  courseRoutes);
+app.use('/api/certificates',             certificateRoutes);
+app.use('/api/health',                   healthRoutes);
+app.use('/api/fitness-centers',          fitnessCenterRoutes);
+app.use('/api/community',                communityRoutes);
+app.use('/api/subscriptions',            subscriptionRoutes);
+app.use('/api/admin/subscriptions',      adminSubscriptionRoutes);
 app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);
 app.use('/api',                          stepTrackingRoutes);

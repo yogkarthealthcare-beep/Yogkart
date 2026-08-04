@@ -28,6 +28,7 @@ const couponsCtrl   = require('../controllers/admin.coupons.controller');
 const databaseCtrl  = require('../controllers/admin.database.controller');
 const credentialsRoutes = require('./admin.credentials.routes');
 const paymentGatewaysCtrl = require('../controllers/admin.payment-gateways.controller');
+const teachersCtrl  = require('../controllers/admin.teachers.controller');
 
 const communicationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -65,12 +66,22 @@ router.put('/products/:id',              productsCtrl.updateProduct);
 router.delete('/products/:id',           productsCtrl.deleteProduct);
 router.patch('/products/:id/toggle',     productsCtrl.toggleProduct);
 
+// Product Variants
+router.get('/products/:productId/variants', productsCtrl.getVariants);
+router.post('/products/:productId/variants', productsCtrl.addVariant);
+router.put('/variants/:variantId',           productsCtrl.updateVariant);
+router.delete('/variants/:variantId',        productsCtrl.deleteVariant);
+
 // ── Categories ────────────────────────────────────────
 router.get('/categories',        categoriesCtrl.getCategories);
 router.post('/categories',       categoriesCtrl.createCategory);
 router.put('/categories/:id',    categoriesCtrl.updateCategory);
 router.delete('/categories/:id', categoriesCtrl.deleteCategory);
 router.patch('/categories/:id/toggle', categoriesCtrl.toggleCategory);
+
+// ── Teachers Approval ────────────────────────────────
+router.get('/teachers',           teachersCtrl.getTeachers);
+router.put('/teachers/:id/status', teachersCtrl.updateTeacherStatus);
 
 // Bulk Communication
 router.get('/communication/campaigns', communicationCtrl.getCampaigns);

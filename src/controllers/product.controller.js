@@ -168,7 +168,6 @@ const getProducts = async (req, res) => {
   }
 };
 
-// ── GET /api/products/:slug ────────────────────────────
 const getProduct = async (req, res) => {
   try {
     const result = await query(
@@ -178,7 +177,20 @@ const getProduct = async (req, res) => {
       [req.params.slug]
     );
     if (result.rows.length === 0) return notFound(res, 'Product not found');
-    return success(res, { product: result.rows[0] });
+
+    const product = result.rows[0];
+
+    // Fetch product variants if available
+    const variantsRes = await query(
+      `SELECT id, sku, attribute_name, attribute_value, price, stock_qty, is_active
+       FROM product_variants
+       WHERE product_id = $1 AND is_active = TRUE
+       ORDER BY price ASC`,
+      [product.id]
+    );
+    product.variants = variantsRes.rows;
+
+    return success(res, { product });
   } catch (err) {
     return error(res, 'Failed to fetch product');
   }

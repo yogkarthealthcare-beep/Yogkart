@@ -8,7 +8,7 @@ const { ensureBulkCommunicationSchema } = require('../src/services/bulkCommunica
 
 let dbConnected = false;
 
-// Allowed origins (same list as app.js — crash ke case mein bhi CORS headers milein)
+// Allowed origins list
 const ALLOWED_ORIGINS = [
   'http://localhost:4200',
   'http://localhost:3000',
@@ -22,35 +22,48 @@ const ALLOWED_ORIGINS = [
   'https://yogkart.in',
 ];
 
-module.exports = async (req, res) => {
-  // CORS headers hamesha set karo — chahe server crash ho jaaye
+function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Silent,X-Skip-Loading');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Silent,X-Skip-Loading,X-Requested-With,Accept,Origin');
+}
 
-  // OPTIONS preflight ka seedha jawab do
+module.exports = async (req, res) => {
+  // CORS headers hamesha set karo — chahe server crash ho ya error aaye
+  setCorsHeaders(req, res);
+
+  // OPTIONS preflight ka seedha response do
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     return res.end();
   }
 
   try {
-    // DB connection ek baar karo, reuse karo (Vercel warm instances)
+    // DB connection aur schemas initialization non-blocking tareeqe se karo
     if (!dbConnected) {
-      await testConnection();
-      await ensurePaymentGatewaySchema();
-      await ensureProductSeoSchema();
-      await ensureBannersSchema();
-      await ensureBulkCommunicationSchema();
-      dbConnected = true;
+      try {
+        await testConnection();
+        await Promise.allSettled([
+          ensurePaymentGatewaySchema(),
+          ensureProductSeoSchema(),
+          ensureBannersSchema(),
+          ensureBulkCommunicationSchema(),
+        ]);
+        dbConnected = true;
+      } catch (dbErr) {
+        console.error('⚠️ DB Init warning on Vercel:', dbErr.message);
+      }
     }
     return app(req, res);
   } catch (err) {
     console.error('Vercel function error:', err.message);
+    setCorsHeaders(req, res);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({
@@ -60,3 +73,4 @@ module.exports = async (req, res) => {
     }));
   }
 };
+

@@ -22,6 +22,7 @@ router.post('/', [
 ], validate, ctrl.placeOrder);
 
 router.get('/',        ctrl.getOrders);
+router.get('/:id/invoice', ctrl.downloadInvoice);
 router.get('/:id',     ctrl.getOrder);
 router.put('/:id/cancel', ctrl.cancelOrder);
 

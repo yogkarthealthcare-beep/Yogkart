@@ -409,6 +409,71 @@ const bulkUpdateStock = async (req, res) => {
   }
 };
 
+const getVariants = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const result = await query(
+      'SELECT * FROM product_variants WHERE product_id = $1 ORDER BY created_at ASC',
+      [productId]
+    );
+    return success(res, { variants: result.rows });
+  } catch (err) {
+    return error(res, 'Failed to fetch variants');
+  }
+};
+
+const addVariant = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { sku, attribute_name = 'Size', attribute_value, price, stock_qty = 0 } = req.body;
+    if (!attribute_value || price === undefined) {
+      return error(res, 'attribute_value and price are required', 400);
+    }
+    const result = await query(
+      `INSERT INTO product_variants (product_id, sku, attribute_name, attribute_value, price, stock_qty)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [productId, sku || null, attribute_name, attribute_value, parseFloat(price), parseInt(stock_qty, 10)]
+    );
+    return created(res, { variant: result.rows[0] }, 'Variant added successfully');
+  } catch (err) {
+    return error(res, err.message || 'Failed to add variant');
+  }
+};
+
+const updateVariant = async (req, res) => {
+  try {
+    const { variantId } = req.params;
+    const { sku, attribute_name, attribute_value, price, stock_qty, is_active } = req.body;
+    const result = await query(
+      `UPDATE product_variants
+       SET sku = COALESCE($1, sku),
+           attribute_name = COALESCE($2, attribute_name),
+           attribute_value = COALESCE($3, attribute_value),
+           price = COALESCE($4, price),
+           stock_qty = COALESCE($5, stock_qty),
+           is_active = COALESCE($6, is_active),
+           updated_at = NOW()
+       WHERE id = $7 RETURNING *`,
+      [sku, attribute_name, attribute_value, price ? parseFloat(price) : null, stock_qty !== undefined ? parseInt(stock_qty, 10) : null, is_active, variantId]
+    );
+    if (!result.rows.length) return notFound(res, 'Variant not found');
+    return success(res, { variant: result.rows[0] }, 'Variant updated successfully');
+  } catch (err) {
+    return error(res, 'Failed to update variant');
+  }
+};
+
+const deleteVariant = async (req, res) => {
+  try {
+    const { variantId } = req.params;
+    const result = await query('DELETE FROM product_variants WHERE id = $1 RETURNING id', [variantId]);
+    if (!result.rows.length) return notFound(res, 'Variant not found');
+    return success(res, null, 'Variant deleted successfully');
+  } catch (err) {
+    return error(res, 'Failed to delete variant');
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -420,4 +485,8 @@ module.exports = {
   bulkDeleteProducts,
   toggleProduct,
   bulkUpdateStock,
+  getVariants,
+  addVariant,
+  updateVariant,
+  deleteVariant,
 };
