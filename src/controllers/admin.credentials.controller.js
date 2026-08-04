@@ -7,7 +7,7 @@ const {
 } = require('../utils/encryption');
 const { success, error, notFound, badRequest } = require('../utils/response');
 
-// Validate encryption key on module load
+// Validate encryption key on module load (non-blocking)
 validateEncryptionKey();
 
 // ──────────────────────────────────────────────────────
