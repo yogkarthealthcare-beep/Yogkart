@@ -28,6 +28,7 @@ const healthRoutes         = require('./routes/health.routes');
 const fitnessCenterRoutes  = require('./routes/fitnessCenter.routes');
 const communityRoutes      = require('./routes/community.routes');
 const bannerRoutes       = require('./routes/banner.routes');   // ✅ Banner routes
+const blogRoutes         = require('./routes/blog.routes');     // ✅ Blog routes
 const subscriptionRoutes   = require('./routes/subscription.routes');
 const adminSubscriptionRoutes = require('./routes/admin.subscription.routes');
 const publicSeoRoutes      = require('./routes/seo.routes');
@@ -136,6 +137,7 @@ app.use('/api/addresses',                addressRoutes);
 app.use('/api/payments',                 paymentRoutes);
 app.use('/api/coupons',                  couponRoutes);
 app.use('/api/banners',                  bannerRoutes);         // ✅ Banner routes
+app.use('/api/blogs',                    blogRoutes);          // ✅ Blog routes
 app.use('/api/teachers',                 teacherRoutes);
 app.use('/api/teacher-bookings',         teacherBookingRoutes);
 app.use('/api/courses',                  courseRoutes);
