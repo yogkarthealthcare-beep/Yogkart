@@ -29,12 +29,19 @@ const fitnessCenterRoutes  = require('./routes/fitnessCenter.routes');
 const communityRoutes      = require('./routes/community.routes');
 const bannerRoutes       = require('./routes/banner.routes');   // ✅ Banner routes
 const blogRoutes         = require('./routes/blog.routes');     // ✅ Blog routes
+const instagramRoutes    = require('./routes/instagram.routes');  // ✅ Instagram Reels routes
+const { ensureInstagramReelsSchema } = require('./services/instagram.service');
+const marketplaceRoutes  = require('./routes/marketplace.routes');
+const { ensureMarketplaceSchema } = require('./services/marketplace.service');
 const subscriptionRoutes   = require('./routes/subscription.routes');
 const adminSubscriptionRoutes = require('./routes/admin.subscription.routes');
 const publicSeoRoutes      = require('./routes/seo.routes');
 const adminSeoRoutes       = require('./routes/admin.seo.routes');
 const seoController      = require('./controllers/seo.controller');
 const socialShareController = require('./controllers/socialShare.controller');
+const analyticsRoutes       = require('./routes/analytics.routes');
+const uploadRoutes          = require('./routes/upload.routes');
+const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
 
 const app = express();
 
@@ -64,6 +71,8 @@ const allowedOrigins = [
   'https://www.yogkart.com',
   'https://yogkart.com',
   'https://yogkart.in',
+  'https://api.yogkart.com',
+  'https://www.api.yogkart.com',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -101,6 +110,12 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 validateEncryptionKey();
+ensureStorageDirs();
+ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagram_reels schema:', err));
+ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
+
+// ── VPS Local Storage Static Serving ─────────────────────
+app.use('/uploads', express.static(STORAGE_ROOT_DIR));
 
 app.get('/health', (req, res) => {
   res.json({
@@ -138,6 +153,8 @@ app.use('/api/payments',                 paymentRoutes);
 app.use('/api/coupons',                  couponRoutes);
 app.use('/api/banners',                  bannerRoutes);         // ✅ Banner routes
 app.use('/api/blogs',                    blogRoutes);          // ✅ Blog routes
+app.use('/api/instagram-reels',          instagramRoutes);     // ✅ Instagram Reels routes
+app.use('/api',                          marketplaceRoutes);   // ✅ Online Selling Platforms routes
 app.use('/api/teachers',                 teacherRoutes);
 app.use('/api/teacher-bookings',         teacherBookingRoutes);
 app.use('/api/courses',                  courseRoutes);
@@ -150,6 +167,9 @@ app.use('/api/admin/subscriptions',      adminSubscriptionRoutes);
 app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);
 app.use('/api',                          stepTrackingRoutes);
+app.use('/api/upload',                uploadRoutes);
+app.use('/api/admin/upload',          uploadRoutes);
+app.use('/api/analytics',                analyticsRoutes);
 
 // 404
 app.use((req, res) => {

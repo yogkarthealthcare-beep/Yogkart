@@ -5,6 +5,8 @@ const { ensurePaymentGatewaySchema } = require('../src/services/paymentGatewaySe
 const { ensureProductSeoSchema } = require('../src/services/productSeo.service');
 const { ensureBannersSchema } = require('../src/services/banner.service');
 const { ensureBulkCommunicationSchema } = require('../src/services/bulkCommunication.service');
+const { ensureInstagramReelsSchema } = require('../src/services/instagram.service');
+const { ensureMarketplaceSchema } = require('../src/services/marketplace.service');
 
 let dbConnected = false;
 
@@ -20,6 +22,8 @@ const ALLOWED_ORIGINS = [
   'https://www.yogkart.com',
   'https://yogkart.com',
   'https://yogkart.in',
+  'https://api.yogkart.com',
+  'https://www.api.yogkart.com',
 ];
 
 function setCorsHeaders(req, res) {
@@ -54,6 +58,8 @@ module.exports = async (req, res) => {
           ensureProductSeoSchema(),
           ensureBannersSchema(),
           ensureBulkCommunicationSchema(),
+          ensureInstagramReelsSchema(),
+          ensureMarketplaceSchema(),
         ]);
         dbConnected = true;
       } catch (dbErr) {

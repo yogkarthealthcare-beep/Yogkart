@@ -29,6 +29,7 @@ const databaseCtrl  = require('../controllers/admin.database.controller');
 const credentialsRoutes = require('./admin.credentials.routes');
 const paymentGatewaysCtrl = require('../controllers/admin.payment-gateways.controller');
 const teachersCtrl  = require('../controllers/admin.teachers.controller');
+const instagramCtrl = require('../controllers/instagram.controller');
 
 const communicationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -104,10 +105,16 @@ router.get('/inventory',                  inventoryCtrl.getInventory);
 router.patch('/inventory/:id/stock',      inventoryCtrl.updateStock);
 
 // ── Analytics ─────────────────────────────────────────
+router.get('/analytics/overview', analyticsCtrl.getOverviewAnalytics);
+router.get('/analytics/traffic',  analyticsCtrl.getTrafficAnalytics);
+router.get('/analytics/funnel',   analyticsCtrl.getFunnelAnalytics);
+router.get('/analytics/search',   analyticsCtrl.getSearchAnalytics);
 router.get('/analytics/sales',    analyticsCtrl.getSalesAnalytics);
 router.get('/analytics/products', analyticsCtrl.getProductAnalytics);
 router.get('/analytics/users',    analyticsCtrl.getUserAnalytics);
 router.get('/analytics/orders',   analyticsCtrl.getOrderAnalytics);
+router.get('/analytics/settings', analyticsCtrl.getSettings);
+router.put('/analytics/settings', analyticsCtrl.updateSettings);
 
 // ── Payments ──────────────────────────────────────────
 // IMPORTANT: /payments/stats PEHLE
@@ -134,5 +141,12 @@ router.post('/coupons/validate', couponsCtrl.validateCoupon);
 
 // ── Credentials ────────────────────────────────────────
 router.use('/credentials', credentialsRoutes);
+
+// ── Instagram Reels ────────────────────────────────────
+router.get('/instagram-reels',           instagramCtrl.getAdminReels);
+router.post('/instagram-reels',          instagramCtrl.createReel);
+router.put('/instagram-reels/:id',       instagramCtrl.updateReel);
+router.delete('/instagram-reels/:id',    instagramCtrl.deleteReel);
+router.patch('/instagram-reels/:id/toggle', instagramCtrl.toggleReelActive);
 
 module.exports = router;

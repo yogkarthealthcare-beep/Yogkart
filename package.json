@@ -12,6 +12,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.2",
     "morgan": "^1.10.1",
+    "multer": "^2.2.0",
     "nodemailer": "^8.0.7",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
@@ -28,6 +29,7 @@
   "scripts": {
     "start": "node src/server.js",
     "migrate": "node migrations/run.js",
+    "migrate:vps": "node scripts/migrate_yogkart_supabase_to_vps.js",
     "testdata:reviews:seed": "node scripts/seed_rating_review_test_data.js",
     "testdata:reviews:verify": "node scripts/verify_rating_review_test_data.js",
     "testdata:reviews:rollback": "node scripts/rollback_rating_review_test_data.js"
