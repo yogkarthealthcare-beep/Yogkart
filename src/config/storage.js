@@ -11,12 +11,15 @@ const getStorageRootDir = () => {
     return path.resolve(process.env.STORAGE_DIR);
   }
   if (process.platform === 'win32') {
-    return path.resolve(__dirname, '../../uploads');
+    // Windows: Save outside project root directory
+    return path.resolve(__dirname, '../../../../yogkart-storage');
   }
+  // Linux / VPS: Outside git project directory
   return '/var/www/yogkart-storage';
 };
 
 const STORAGE_ROOT_DIR = getStorageRootDir();
+
 
 const ALLOWED_CATEGORIES = [
   'products',
