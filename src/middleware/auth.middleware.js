@@ -19,11 +19,16 @@ const protect = async (req, res, next) => {
         'SELECT id, name, email, role, is_active FROM admins WHERE id = $1',
         [decoded.id]
       );
-      if (adminResult.rows.length > 0 && adminResult.rows[0].is_active) {
-        req.admin = adminResult.rows[0];
-        req.user = { ...adminResult.rows[0], role: 'admin' };
-        return next();
+      if (adminResult.rows.length === 0) {
+        return unauthorized(res, 'Admin account not found');
       }
+      const admin = adminResult.rows[0];
+      if (!admin.is_active) {
+        return unauthorized(res, 'Admin account is deactivated');
+      }
+      req.admin = admin;
+      req.user = { ...admin, role: admin.role || 'admin' };
+      return next();
     }
 
     // Fetch fresh user from DB
@@ -33,7 +38,7 @@ const protect = async (req, res, next) => {
     );
 
     if (result.rows.length === 0) {
-      return unauthorized(res, 'User not found');
+      return unauthorized(res, 'User account not found');
     }
 
     const user = result.rows[0];
@@ -43,6 +48,7 @@ const protect = async (req, res, next) => {
 
     req.user = user;
     next();
+
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return unauthorized(res, 'Token expired');
