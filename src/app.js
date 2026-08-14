@@ -140,6 +140,8 @@ app.get('/share/products/:slug', socialShareController.getSocialPreview);
 app.use('/seo',                          publicSeoRoutes);
 app.use('/api/auth',       authLimiter,  authRoutes);
 app.use('/api/admin-auth', authLimiter,  adminAuthRoutes);
+app.use('/api/upload',                   uploadRoutes);
+app.use('/api/admin/upload',             uploadRoutes);
 app.use('/api/admin',                    adminRoutes);
 app.use('/api/seo',                      publicSeoRoutes);
 app.use('/api/admin/seo',                adminSeoRoutes);
@@ -167,9 +169,8 @@ app.use('/api/admin/subscriptions',      adminSubscriptionRoutes);
 app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);
 app.use('/api',                          stepTrackingRoutes);
-app.use('/api/upload',                uploadRoutes);
-app.use('/api/admin/upload',          uploadRoutes);
 app.use('/api/analytics',                analyticsRoutes);
+
 
 // 404
 app.use((req, res) => {
