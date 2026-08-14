@@ -3,7 +3,7 @@ const multer = require('multer');
 const router = express.Router();
 const upload = require('../middleware/upload.middleware');
 const uploadCtrl = require('../controllers/upload.controller');
-const { optionalAuth } = require('../middleware/auth.middleware');
+const { adminProtect } = require('../middleware/admin.auth.middleware');
 
 // Helper to catch multer errors safely without 500 crash
 const handleSingleUpload = (req, res, next) => {
@@ -28,10 +28,10 @@ const handleMultipleUpload = (req, res, next) => {
   });
 };
 
-// ── Hybrid & Fail-Safe Upload Endpoints (Optional Auth Supported) ──
-router.post('/', optionalAuth, handleSingleUpload, uploadCtrl.uploadSingleFile);
-router.post('/single', optionalAuth, handleSingleUpload, uploadCtrl.uploadSingleFile);
-router.post('/multiple', optionalAuth, handleMultipleUpload, uploadCtrl.uploadMultipleFiles);
-router.delete('/', optionalAuth, uploadCtrl.deleteUploadedFile);
+// ── Admin Protected Upload Endpoints (Verified via Admin Login Token) ──
+router.post('/', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
+router.post('/single', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
+router.post('/multiple', adminProtect, handleMultipleUpload, uploadCtrl.uploadMultipleFiles);
+router.delete('/', adminProtect, uploadCtrl.deleteUploadedFile);
 
 module.exports = router;
