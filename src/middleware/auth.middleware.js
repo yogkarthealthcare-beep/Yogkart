@@ -13,6 +13,19 @@ const protect = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // If token is from admin source, fetch from admins table
+    if (decoded.source === 'admin') {
+      const adminResult = await query(
+        'SELECT id, name, email, role, is_active FROM admins WHERE id = $1',
+        [decoded.id]
+      );
+      if (adminResult.rows.length > 0 && adminResult.rows[0].is_active) {
+        req.admin = adminResult.rows[0];
+        req.user = { ...adminResult.rows[0], role: 'admin' };
+        return next();
+      }
+    }
+
     // Fetch fresh user from DB
     const result = await query(
       'SELECT id, name, email, phone, role, is_active FROM users WHERE id = $1',
@@ -58,6 +71,19 @@ const optionalAuth = async (req, res, next) => {
     }
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    if (decoded.source === 'admin') {
+      const adminResult = await query(
+        'SELECT id, name, email, role FROM admins WHERE id = $1 AND is_active = TRUE',
+        [decoded.id]
+      );
+      if (adminResult.rows.length > 0) {
+        req.admin = adminResult.rows[0];
+        req.user = { ...adminResult.rows[0], role: 'admin' };
+      }
+      return next();
+    }
+
     const result = await query(
       'SELECT id, name, email, phone, role FROM users WHERE id = $1 AND is_active = TRUE',
       [decoded.id]
@@ -70,3 +96,4 @@ const optionalAuth = async (req, res, next) => {
 };
 
 module.exports = { protect, adminOnly, optionalAuth };
+
