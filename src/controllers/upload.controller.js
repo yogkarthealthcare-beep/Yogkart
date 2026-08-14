@@ -27,7 +27,12 @@ const buildFileUrl = (req, category, filename) => {
  */
 const uploadSingleFile = async (req, res) => {
   try {
+    console.log('📥 [Backend Upload] Single file upload request received');
+    console.log('📥 [Backend Upload] req.file:', req.file);
+    console.log('📥 [Backend Upload] req.body:', req.body);
+
     if (!req.file) {
+      console.warn('⚠️ [Backend Upload] req.file is missing');
       return error(res, 'No file uploaded', 400);
     }
 
@@ -39,6 +44,8 @@ const uploadSingleFile = async (req, res) => {
     const filename = req.file.filename;
     const fileUrl = buildFileUrl(req, category, filename);
 
+    console.log('✅ [Backend Upload] Single file saved successfully:', fileUrl);
+
     return success(res, {
       url: fileUrl,
       relative_path: `/uploads/${category}/${filename}`,
@@ -49,8 +56,8 @@ const uploadSingleFile = async (req, res) => {
       mimetype: req.file.mimetype,
     }, 'File uploaded successfully');
   } catch (err) {
-    console.error('uploadSingleFile error:', err);
-    return error(res, 'Failed to upload file');
+    console.error('❌ [Backend Upload] uploadSingleFile error:', err);
+    return error(res, `Failed to upload file: ${err.message || err}`, 500);
   }
 };
 
@@ -59,7 +66,12 @@ const uploadSingleFile = async (req, res) => {
  */
 const uploadMultipleFiles = async (req, res) => {
   try {
+    console.log('📥 [Backend Upload] Multiple files upload request received');
+    console.log('📥 [Backend Upload] req.files count:', req.files?.length);
+    console.log('📥 [Backend Upload] req.body:', req.body);
+
     if (!req.files || req.files.length === 0) {
+      console.warn('⚠️ [Backend Upload] req.files is missing or empty');
       return error(res, 'No files uploaded', 400);
     }
 
@@ -82,15 +94,18 @@ const uploadMultipleFiles = async (req, res) => {
       };
     });
 
+    console.log('✅ [Backend Upload] Multiple files saved successfully. URLs:', uploadedFiles.map(f => f.url));
+
     return success(res, {
       files: uploadedFiles,
       urls: uploadedFiles.map(f => f.url)
     }, 'Files uploaded successfully');
   } catch (err) {
-    console.error('uploadMultipleFiles error:', err);
-    return error(res, 'Failed to upload files');
+    console.error('❌ [Backend Upload] uploadMultipleFiles error:', err);
+    return error(res, `Failed to upload files: ${err.message || err}`, 500);
   }
 };
+
 
 /**
  * DELETE /api/admin/upload - Safely delete a VPS-stored uploaded file
