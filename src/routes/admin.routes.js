@@ -40,8 +40,23 @@ const communicationLimiter = rateLimit({
   }),
 });
 
-// ── Public & Auth-Free Product and Category Routes ─────
-router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);
+// ── All admin routes → admin JWT required ──────────────
+router.use(adminProtect);
+
+// ── Dashboard ──────────────────────────────────────────
+router.get('/dashboard', dashCtrl.getDashboardStats);
+
+// ── Orders ────────────────────────────────────────────
+// IMPORTANT: /orders/stats PEHLE, /orders/:id BAAD MEIN
+router.get('/orders/stats',        ordersCtrl.getOrderStats);
+router.get('/orders',              ordersCtrl.getOrders);
+router.get('/orders/:id',          ordersCtrl.getOrder);
+router.patch('/orders/:id/status', ordersCtrl.updateOrderStatus);
+router.delete('/orders/:id',       ordersCtrl.cancelOrder);
+
+// ── Products ──────────────────────────────────────────
+// IMPORTANT: /products/bulk-stock PEHLE, /products/:id BAAD MEIN
+router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);  // ← PEHLE
 router.post('/products/bulk-deactivate', productsCtrl.bulkDeactivateProducts);
 router.post('/products/bulk-delete',     productsCtrl.bulkDeleteProducts);
 router.post('/products/seo/generate',     productsCtrl.generateSeoPreview);
@@ -58,27 +73,12 @@ router.post('/products/:productId/variants', productsCtrl.addVariant);
 router.put('/variants/:variantId',           productsCtrl.updateVariant);
 router.delete('/variants/:variantId',        productsCtrl.deleteVariant);
 
-// Categories
+// ── Categories ────────────────────────────────────────
 router.get('/categories',        categoriesCtrl.getCategories);
 router.post('/categories',       categoriesCtrl.createCategory);
 router.put('/categories/:id',    categoriesCtrl.updateCategory);
 router.delete('/categories/:id', categoriesCtrl.deleteCategory);
 router.patch('/categories/:id/toggle', categoriesCtrl.toggleCategory);
-
-// ── All other admin routes → admin JWT required ────────
-router.use(adminProtect);
-
-// ── Dashboard ──────────────────────────────────────────
-router.get('/dashboard', dashCtrl.getDashboardStats);
-
-// ── Orders ────────────────────────────────────────────
-// IMPORTANT: /orders/stats PEHLE, /orders/:id BAAD MEIN
-router.get('/orders/stats',        ordersCtrl.getOrderStats);
-router.get('/orders',              ordersCtrl.getOrders);
-router.get('/orders/:id',          ordersCtrl.getOrder);
-router.patch('/orders/:id/status', ordersCtrl.updateOrderStatus);
-router.delete('/orders/:id',       ordersCtrl.cancelOrder);
-
 
 // ── Teachers Approval ────────────────────────────────
 router.get('/teachers',           teachersCtrl.getTeachers);
