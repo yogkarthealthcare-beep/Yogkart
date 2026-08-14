@@ -3,32 +3,10 @@ const router = express.Router();
 const upload = require('../middleware/upload.middleware');
 const uploadCtrl = require('../controllers/upload.controller');
 
-// Optional token handler for upload routes (graceful authentication)
-const optionalAdminProtect = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const jwt = require('jsonwebtoken');
-      const { query } = require('../config/database');
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (decoded.source === 'admin') {
-        const result = await query(`SELECT id, name, email, role FROM admins WHERE id = $1`, [decoded.id]);
-        if (result.rows.length > 0) {
-          req.admin = result.rows[0];
-        }
-      }
-    }
-  } catch (err) {
-    // Ignore invalid/expired token during upload so file upload never blocks
-  }
-  next();
-};
-
-// Upload endpoints with optionalAdminProtect (handles both authenticated & fallback uploads cleanly)
-router.post('/', optionalAdminProtect, upload.single('file'), uploadCtrl.uploadSingleFile);
-router.post('/single', optionalAdminProtect, upload.single('file'), uploadCtrl.uploadSingleFile);
-router.post('/multiple', optionalAdminProtect, upload.array('files', 10), uploadCtrl.uploadMultipleFiles);
-router.delete('/', optionalAdminProtect, uploadCtrl.deleteUploadedFile);
+// ── Completely Public & Auth-Free Upload Endpoints ──
+router.post('/', upload.single('file'), uploadCtrl.uploadSingleFile);
+router.post('/single', upload.single('file'), uploadCtrl.uploadSingleFile);
+router.post('/multiple', upload.array('files', 10), uploadCtrl.uploadMultipleFiles);
+router.delete('/', uploadCtrl.deleteUploadedFile);
 
 module.exports = router;
