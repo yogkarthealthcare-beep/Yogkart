@@ -27,6 +27,7 @@ const ensureBlogsTableExists = async () => {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+    `);
     const countRes = await query(`SELECT COUNT(*) FROM blogs`);
     if (parseInt(countRes.rows[0]?.count || 0) === 0) {
       await query(`
