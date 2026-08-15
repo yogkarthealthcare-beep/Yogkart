@@ -118,6 +118,12 @@ ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagra
 ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
 
 // ── VPS Local Storage Static Serving (Cross-Origin Enabled) ──
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+
 const staticUploadsOptions = {
   setHeaders: (res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -127,6 +133,7 @@ const staticUploadsOptions = {
 
 app.use('/uploads', express.static(STORAGE_ROOT_DIR, staticUploadsOptions));
 app.use('/uploads', express.static(require('path').resolve(__dirname, '../uploads'), staticUploadsOptions));
+
 
 
 
