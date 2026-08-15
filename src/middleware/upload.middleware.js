@@ -5,6 +5,36 @@ const { STORAGE_ROOT_DIR, ALLOWED_CATEGORIES, ensureStorageDirs } = require('../
 
 ensureStorageDirs();
 
+/**
+ * Creates clean, human-readable, Google Image Search SEO-friendly filenames
+ * Example: "Neem Wood Comb #1.png" -> "yogkart-neem-wood-comb-4a8b.png"
+ */
+const generateSeoFilename = (originalname, customTitle) => {
+  const ext = path.extname(originalname || '').toLowerCase();
+  const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'].includes(ext) ? ext : '.jpg';
+
+  const baseText = customTitle || path.basename(originalname, ext);
+
+  let slug = String(baseText || 'yogkart-product')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 50);
+
+  if (!slug) {
+    slug = 'yogkart-product';
+  }
+
+  if (!slug.startsWith('yogkart')) {
+    slug = `yogkart-${slug}`;
+  }
+
+  const uniqueSuffix = `${Date.now().toString(36).slice(-4)}${crypto.randomBytes(2).toString('hex')}`;
+  return `${slug}-${uniqueSuffix}${safeExt}`;
+};
+
 // Disk storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -17,17 +47,12 @@ const storage = multer.diskStorage({
     cb(null, destDir);
   },
   filename: (req, file, cb) => {
-    // Generate safe unique filename: <timestamp>-<random_hex>.<ext>
-    const timestamp = Date.now();
-    const randomHex = crypto.randomBytes(8).toString('hex');
-    const ext = path.extname(file.originalname).toLowerCase();
-    
-    // Allowed image extensions
-    const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'].includes(ext) ? ext : '.jpg';
-    const safeFilename = `${timestamp}-${randomHex}${safeExt}`;
-    cb(null, safeFilename);
+    const customTitle = req.body.title || req.body.name || req.query.title || req.query.name;
+    const seoFilename = generateSeoFilename(file.originalname, customTitle);
+    cb(null, seoFilename);
   }
 });
+
 
 // File filter validation
 const fileFilter = (req, file, cb) => {
