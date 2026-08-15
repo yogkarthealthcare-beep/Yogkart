@@ -23,6 +23,35 @@ const buildFileUrl = (req, category, filename) => {
 };
 
 /**
+ * Guarantees uploaded file exists in both VPS storage and local uploads directory
+ */
+const ensureDualStorageCopy = (file, category) => {
+  try {
+    if (!file || !file.path) return;
+    const filename = file.filename;
+    const secondaryDir = path.resolve(__dirname, '../../uploads');
+
+    const primaryCategoryDir = path.join(STORAGE_ROOT_DIR, category);
+    const secondaryCategoryDir = path.join(secondaryDir, category);
+
+    if (!fs.existsSync(primaryCategoryDir)) fs.mkdirSync(primaryCategoryDir, { recursive: true });
+    if (!fs.existsSync(secondaryCategoryDir)) fs.mkdirSync(secondaryCategoryDir, { recursive: true });
+
+    const primaryFilePath = path.join(primaryCategoryDir, filename);
+    const secondaryFilePath = path.join(secondaryCategoryDir, filename);
+
+    if (fs.existsSync(file.path) && file.path !== primaryFilePath && !fs.existsSync(primaryFilePath)) {
+      fs.copyFileSync(file.path, primaryFilePath);
+    }
+    if (fs.existsSync(file.path) && file.path !== secondaryFilePath && !fs.existsSync(secondaryFilePath)) {
+      fs.copyFileSync(file.path, secondaryFilePath);
+    }
+  } catch (copyErr) {
+    console.warn('⚠️ Dual storage sync warning:', copyErr.message);
+  }
+};
+
+/**
  * POST /api/admin/upload - Handle single file upload
  */
 const uploadSingleFile = async (req, res) => {
@@ -41,10 +70,13 @@ const uploadSingleFile = async (req, res) => {
       category = 'other';
     }
 
+    ensureDualStorageCopy(req.file, category);
+
     const filename = req.file.filename;
     const fileUrl = buildFileUrl(req, category, filename);
 
     console.log('✅ [Backend Upload] Single file saved successfully:', fileUrl);
+
 
     return success(res, {
       url: fileUrl,
@@ -81,8 +113,10 @@ const uploadMultipleFiles = async (req, res) => {
     }
 
     const uploadedFiles = req.files.map(file => {
+      ensureDualStorageCopy(file, category);
       const filename = file.filename;
       const fileUrl = buildFileUrl(req, category, filename);
+
       return {
         url: fileUrl,
         relative_path: `/uploads/${category}/${filename}`,
