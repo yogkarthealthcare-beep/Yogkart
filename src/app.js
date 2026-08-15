@@ -149,9 +149,11 @@ app.get('/llms.txt', seoController.llmsTxt);
 app.get('/llms-full.txt', seoController.llmsTxt);
 app.get('/share/products/:slug', socialShareController.getSocialPreview);
 
-// ── Routes ────────────────────────────────────────────
-app.use('/seo',                          publicSeoRoutes);
+const deployRoutes        = require('./routes/deploy.routes');
+
+app.use('/api',                          deployRoutes);
 app.use('/api/auth',       authLimiter,  authRoutes);
+
 app.use('/api/admin-auth', authLimiter,  adminAuthRoutes);
 app.use('/api/upload',                   uploadRoutes);
 app.use('/api/admin/upload',             uploadRoutes);
