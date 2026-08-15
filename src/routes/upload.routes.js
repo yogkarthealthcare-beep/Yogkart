@@ -28,12 +28,15 @@ const handleMultipleUpload = (req, res, next) => {
   });
 };
 
+// Public / Admin verification endpoint (no file upload required)
+router.all('/verify-images', uploadCtrl.verifyImageExistence);
+
 // ── Admin Protected Upload Endpoints (Verified via Admin Login Token) ──
 router.post('/', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
 router.post('/single', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
 router.post('/multiple', adminProtect, handleMultipleUpload, uploadCtrl.uploadMultipleFiles);
 router.delete('/', adminProtect, uploadCtrl.deleteUploadedFile);
-router.all('/verify-images', uploadCtrl.verifyImageExistence);
 
 module.exports = router;
+
 
