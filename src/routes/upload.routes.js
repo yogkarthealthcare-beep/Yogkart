@@ -33,5 +33,7 @@ router.post('/', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
 router.post('/single', adminProtect, handleSingleUpload, uploadCtrl.uploadSingleFile);
 router.post('/multiple', adminProtect, handleMultipleUpload, uploadCtrl.uploadMultipleFiles);
 router.delete('/', adminProtect, uploadCtrl.deleteUploadedFile);
+router.all('/verify-images', uploadCtrl.verifyImageExistence);
 
 module.exports = router;
+

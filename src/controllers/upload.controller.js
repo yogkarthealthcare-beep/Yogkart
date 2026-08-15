@@ -189,8 +189,59 @@ const deleteUploadedFile = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/upload/verify-images - Server-authoritative filesystem check for image URLs
+ */
+const verifyImageExistence = async (req, res) => {
+  try {
+    const urls = Array.isArray(req.body?.urls) ? req.body.urls : [req.body?.url || req.query?.url].filter(Boolean);
+    const results = {};
+
+    for (const rawUrl of urls) {
+      if (!rawUrl || typeof rawUrl !== 'string') continue;
+      const url = rawUrl.trim();
+
+      const match = url.match(/\/uploads\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)$/);
+      if (match) {
+        const category = match[1];
+        const filename = match[2];
+        const primaryPath = path.join(STORAGE_ROOT_DIR, category, filename);
+        const secondaryPath = path.resolve(__dirname, '../../uploads', category, filename);
+
+        const existsOnPrimary = fs.existsSync(primaryPath);
+        const existsOnSecondary = fs.existsSync(secondaryPath);
+
+        const exists = existsOnPrimary || existsOnSecondary;
+        results[url] = {
+          exists,
+          isLocal: true,
+          category,
+          filename
+        };
+      } else if (url.includes('cloudinary.com') || /^https?:\/\//i.test(url)) {
+        results[url] = {
+          exists: true,
+          isLocal: false
+        };
+      } else {
+        results[url] = {
+          exists: false,
+          isLocal: false
+        };
+      }
+    }
+
+    return success(res, results, 'Image existence verified');
+  } catch (err) {
+    console.error('verifyImageExistence error:', err);
+    return error(res, 'Failed to verify image existence');
+  }
+};
+
 module.exports = {
   uploadSingleFile,
   uploadMultipleFiles,
   deleteUploadedFile,
+  verifyImageExistence,
 };
+
