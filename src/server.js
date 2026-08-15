@@ -7,27 +7,37 @@ const { ensureBulkCommunicationSchema } = require('./services/bulkCommunication.
 
 const PORT = process.env.PORT || 3000;
 
-const start = async () => {
-  try {
-    await testConnection();
-    await ensurePaymentGatewaySchema();
-    await ensureProductSeoSchema();
-    await ensureBannersSchema();
-    await ensureBulkCommunicationSchema();
+// ── Fail-Safe Server Startup ──────────────────────────────
+// Start listening on PORT immediately so Nginx reverse proxy (127.0.0.1:3000)
+// never receives ECONNREFUSED or 502 Bad Gateway.
+const server = app.listen(PORT, () => {
+  console.log(`✅ Yogkart API server listening on http://127.0.0.1:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-    app.listen(PORT, () => {
-      console.log(`Yogkart API running on http://localhost:${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log('Key Endpoints:');
-      console.log('  POST   /api/auth/login');
-      console.log('  POST   /api/admin-auth/login');
-      console.log('  GET    /api/admin/dashboard');
-      console.log('  POST   /api/detect-disease');
-    });
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
-};
+  // Non-blocking background database connection & schema initialization
+  (async () => {
+    try {
+      await testConnection();
+      await Promise.allSettled([
+        ensurePaymentGatewaySchema(),
+        ensureProductSeoSchema(),
+        ensureBannersSchema(),
+        ensureBulkCommunicationSchema(),
+      ]);
+      console.log('✅ Database connection and schemas initialized successfully');
+    } catch (dbErr) {
+      console.error('⚠️ Database initialization warning:', dbErr.message);
+    }
+  })();
+});
 
-start();
+// Clean exception handlers to prevent Node process crash loops in PM2
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception:', err.message);
+});
+
+module.exports = server;
