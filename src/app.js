@@ -45,7 +45,10 @@ const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
 
 const app = express();
 
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false
+}));
 app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
@@ -114,9 +117,17 @@ ensureStorageDirs();
 ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagram_reels schema:', err));
 ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
 
-// ── VPS Local Storage Static Serving ─────────────────────
-app.use('/uploads', express.static(STORAGE_ROOT_DIR));
-app.use('/uploads', express.static(require('path').resolve(__dirname, '../uploads')));
+// ── VPS Local Storage Static Serving (Cross-Origin Enabled) ──
+const staticUploadsOptions = {
+  setHeaders: (res) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+};
+
+app.use('/uploads', express.static(STORAGE_ROOT_DIR, staticUploadsOptions));
+app.use('/uploads', express.static(require('path').resolve(__dirname, '../uploads'), staticUploadsOptions));
+
 
 
 app.get('/health', (req, res) => {
