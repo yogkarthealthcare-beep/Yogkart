@@ -116,6 +116,8 @@ ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace
 
 // ── VPS Local Storage Static Serving ─────────────────────
 app.use('/uploads', express.static(STORAGE_ROOT_DIR));
+app.use('/uploads', express.static(require('path').resolve(__dirname, '../uploads')));
+
 
 app.get('/health', (req, res) => {
   res.json({
