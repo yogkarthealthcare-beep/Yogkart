@@ -42,6 +42,8 @@ const socialShareController = require('./controllers/socialShare.controller');
 const analyticsRoutes       = require('./routes/analytics.routes');
 const uploadRoutes          = require('./routes/upload.routes');
 const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
+const navigationRoutes      = require('./routes/navigation.routes');
+const settingsRoutes        = require('./routes/settings.routes');
 
 const app = express();
 
@@ -192,6 +194,8 @@ app.use('/api',                          diseaseRoutes);
 app.use('/api',                          reminderRoutes);
 app.use('/api',                          stepTrackingRoutes);
 app.use('/api/analytics',                analyticsRoutes);
+app.use('/api/navigation',               navigationRoutes);
+app.use('/api/settings',                 settingsRoutes);
 
 
 // 404

@@ -4,6 +4,8 @@ const { ensurePaymentGatewaySchema } = require('./services/paymentGatewaySetting
 const { ensureProductSeoSchema } = require('./services/productSeo.service');
 const { ensureBannersSchema } = require('./services/banner.service');
 const { ensureBulkCommunicationSchema } = require('./services/bulkCommunication.service');
+const { ensureNavigationSchema } = require('./services/navigation.service');
+const { ensureSettingsSchema } = require('./services/settings.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -23,6 +25,8 @@ const server = app.listen(PORT, () => {
         ensureProductSeoSchema(),
         ensureBannersSchema(),
         ensureBulkCommunicationSchema(),
+        ensureNavigationSchema(),
+        ensureSettingsSchema(),
       ]);
       console.log('✅ Database connection and schemas initialized successfully');
     } catch (dbErr) {
