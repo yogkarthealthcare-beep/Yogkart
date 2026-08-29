@@ -21,10 +21,12 @@ console.log("DB:", process.env.DB_NAME);
 console.log("USER:", process.env.DB_USER);
 console.log("PASSWORD:", process.env.DB_PASSWORD ? "✅ Loaded" : "❌ Missing");
 
+const dbSsl = process.env.DB_SSL === 'disable' ? false : { rejectUnauthorized: false };
+
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      ssl: dbSsl,
       max: 5,
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
@@ -35,7 +37,7 @@ const poolConfig = process.env.DATABASE_URL
       database: process.env.DB_NAME || 'postgres',
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      ssl: { rejectUnauthorized: false },
+      ssl: dbSsl,
       max: 5,
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
