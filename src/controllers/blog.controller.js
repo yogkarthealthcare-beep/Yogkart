@@ -122,6 +122,21 @@ const ensureBlogsTableExists = async () => {
             'Wooden Neem Comb Benefits for Healthy Hair | Yogkart',
             'Discover why switching to a handcrafted neem wood comb stops hair breakage, distributes natural sebum, and soothes scalp.',
             ARRAY['neem comb benefits', 'kachi neem comb', 'wooden hair brush']
+        ),
+        (
+            'Wooden Comb vs Plastic Comb: Which One Is Better for Your Hair?',
+            'wooden-comb-vs-plastic-comb-which-one-is-better-for-your-hair',
+            'https://images.unsplash.com/photo-1590159763121-7c9fd312190d?q=80&w=800&auto=format&fit=crop',
+            'Confused between a wooden comb vs plastic comb? Discover why neem wood combs are better for hair fall, scalp health, and static reduction than plastic.',
+            '<h2>Why Your Choice of Comb Matters</h2><p>We spend thousands of rupees on premium shampoos and hair serums, but we rarely think about the comb we drag through our hair daily. Upgrading from a plastic comb to a Kachi Neem wooden comb is one of the simplest ways to reduce hair breakage and improve scalp health naturally.</p><h3>1. Goodbye Static, Goodbye Breakage</h3><p>Plastic combs create electrostatic charge when rubbed against hair. This charge makes hair brittle, frizzy, and highly prone to snapping. Wooden combs are natural insulators, meaning they do not produce static electricity, allowing them to glide smoothly through your hair without friction.</p><h3>2. A Gentle Massage for Your Scalp</h3><p>Unlike the sharp, scratching teeth of plastic combs that can cause micro-injuries and lead to dandruff infections, wooden combs feature smooth, rounded teeth that gently massage your scalp, increasing blood circulation and strengthening hair roots.</p><h3>3. Natural Oil Distribution</h3><p>Your scalp produces sebum (natural oils) to keep hair moisturized. Plastic repels oil, leaving it accumulated at the roots. Wood naturally absorbs and distributes this sebum evenly to the very ends of your hair, acting as a built-in conditioner.</p>',
+            'Hair Care',
+            ARRAY['Neem Comb', 'Hair Fall', 'Scalp Care', 'Natural Care'],
+            'Yogkart Team',
+            '5 min read',
+            true, true, true,
+            'Wooden Comb vs Plastic Comb: Which One Is Better for Your Hair?',
+            'Confused between a wooden comb vs plastic comb? Discover why neem wood combs are better for hair fall, scalp health, and static reduction than plastic.',
+            ARRAY['wooden comb vs plastic comb', 'neem comb benefits', 'natural hair care']
         )
         ON CONFLICT (slug) DO NOTHING;
       `);
