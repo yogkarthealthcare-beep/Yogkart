@@ -133,11 +133,12 @@ const createProduct = async (req, res) => {
         seo_title, meta_description, meta_keywords, canonical_url,
         short_description, seo_description, product_highlights, image_alt_text,
         faq_json, schema_json, seo_score, seo_suggestions, seo_generated_by,
+        how_to_use, ingredients_list, specifications, precautions,
         seo_generated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
         $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,
-        $37,$38,NOW()
+        $37,$38,$39,$40,$41,$42,NOW()
       ) RETURNING *`,
       [
         name, seo.slug, categoryId, subcategory || null, brand,
@@ -151,6 +152,10 @@ const createProduct = async (req, res) => {
         seo.short_description, seo.seo_description, seo.product_highlights,
         seo.image_alt_text, JSON.stringify(seo.faq_json), JSON.stringify(seo.schema_json),
         seo.seo_score, seo.seo_suggestions, seo.generated_by,
+        JSON.stringify(req.body.how_to_use || []),
+        JSON.stringify(req.body.ingredients_list || []),
+        JSON.stringify(req.body.specifications || []),
+        req.body.precautions || null,
       ]
     );
     if (result.rows[0].is_active) notifySearchIndexing(result.rows[0]).catch(() => {});
@@ -220,6 +225,10 @@ const updateProduct = async (req, res) => {
       country_of_origin: merged.country_of_origin || null,
       pack_size: merged.pack_size || null,
       is_active: Boolean(merged.is_active),
+      how_to_use: JSON.stringify(req.body.how_to_use !== undefined ? req.body.how_to_use : (existing.how_to_use || [])),
+      ingredients_list: JSON.stringify(req.body.ingredients_list !== undefined ? req.body.ingredients_list : (existing.ingredients_list || [])),
+      specifications: JSON.stringify(req.body.specifications !== undefined ? req.body.specifications : (existing.specifications || [])),
+      precautions: req.body.precautions !== undefined ? req.body.precautions : (existing.precautions || null),
       seo_title: seo.seo_title,
       meta_description: seo.meta_description,
       meta_keywords: seo.meta_keywords,

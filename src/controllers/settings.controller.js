@@ -2,11 +2,12 @@ const SettingsModel = require('../models/settings.model');
 
 exports.getPublicSettings = async (req, res) => {
   try {
-    // Only return settings safe for public, like announcement_bar
+    // Return safe settings for public pages
     const announcement_bar = await SettingsModel.getSetting('announcement_bar');
+    const product_page_settings = await SettingsModel.getSetting('product_page_settings');
     res.json({ 
       success: true, 
-      data: { announcement_bar } 
+      data: { announcement_bar, product_page_settings } 
     });
   } catch (error) {
     console.error('Error fetching public settings:', error);
