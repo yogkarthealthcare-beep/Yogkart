@@ -35,6 +35,8 @@ const marketplaceRoutes  = require('./routes/marketplace.routes');
 const { ensureMarketplaceSchema } = require('./services/marketplace.service');
 const subscriptionRoutes   = require('./routes/subscription.routes');
 const adminSubscriptionRoutes = require('./routes/admin.subscription.routes');
+const adminCustomerContactsRoutes = require('./routes/admin.customerContacts.routes');
+const { ensureCustomerContactsSchema } = require('./services/customerContacts.service');
 const publicSeoRoutes      = require('./routes/seo.routes');
 const adminSeoRoutes       = require('./routes/admin.seo.routes');
 const seoController      = require('./controllers/seo.controller');
@@ -118,6 +120,7 @@ validateEncryptionKey();
 ensureStorageDirs();
 ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagram_reels schema:', err));
 ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
+ensureCustomerContactsSchema().catch(err => console.error('Error ensuring customer_contacts schema:', err));
 
 // ── VPS Local Storage Static Serving (Cross-Origin Enabled) ──
 app.use('/uploads', (req, res, next) => {
@@ -166,6 +169,7 @@ app.use('/api/auth',       authLimiter,  authRoutes);
 app.use('/api/admin-auth', authLimiter,  adminAuthRoutes);
 app.use('/api/upload',                   uploadRoutes);
 app.use('/api/admin/upload',             uploadRoutes);
+app.use('/api/admin/customer-contacts',  adminCustomerContactsRoutes);
 app.use('/api/admin',                    adminRoutes);
 app.use('/api/seo',                      publicSeoRoutes);
 app.use('/api/admin/seo',                adminSeoRoutes);
