@@ -184,11 +184,16 @@ const getOrders = async (req, res) => {
     params.push(parseInt(limit), offset);
     const ordersRes = await query(
       `SELECT o.*,
-        json_agg(json_build_object(
-          'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
-          'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
-          'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
-        )) AS items
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
+              'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
+              'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
+            )
+          ) FILTER (WHERE oi.id IS NOT NULL),
+          '[]'::json
+        ) AS items
        FROM orders o
        LEFT JOIN order_items oi ON oi.order_id = o.id
        ${where}
@@ -200,10 +205,21 @@ const getOrders = async (req, res) => {
 
     const orders = ordersRes.rows.map(order => ({
       ...order,
-      items: (order.items ?? []).map(item => ({
-        ...item,
-        product_name: item.name,
-      }))
+      address: {
+        name: order.address_name || '',
+        phone: order.address_phone || '',
+        line1: order.address_line1 || '',
+        city: order.address_city || '',
+        state: order.address_state || '',
+        pincode: order.address_pincode || '',
+      },
+      items: (order.items ?? [])
+        .filter(item => item && (item.id !== null || item.product_id !== null))
+        .map(item => ({
+          ...item,
+          product_name: item.name,
+          image: item.thumbnail,
+        }))
     }));
     return success(res, orders, 'Orders fetched');
   } catch (err) {
@@ -266,18 +282,42 @@ const cancelOrder = async (req, res) => {
 const getOrderById = async (orderId, userId) => {
   const result = await query(
     `SELECT o.*,
-      json_agg(json_build_object(
-        'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
-        'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
-        'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
-      )) AS items
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
+            'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
+            'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
+          )
+        ) FILTER (WHERE oi.id IS NOT NULL),
+        '[]'::json
+      ) AS items
      FROM orders o
      LEFT JOIN order_items oi ON oi.order_id = o.id
      WHERE o.id = $1 AND o.user_id = $2
      GROUP BY o.id`,
     [orderId, userId]
   );
-  return result.rows[0] || null;
+  if (!result.rows.length) return null;
+  const order = result.rows[0];
+  return {
+    ...order,
+    address: {
+      name: order.address_name || '',
+      phone: order.address_phone || '',
+      line1: order.address_line1 || '',
+      city: order.address_city || '',
+      state: order.address_state || '',
+      pincode: order.address_pincode || '',
+    },
+    items: (order.items ?? [])
+      .filter(item => item && (item.id !== null || item.product_id !== null))
+      .map(item => ({
+        ...item,
+        product_name: item.name,
+        image: item.thumbnail,
+      }))
+  };
 };
 
 module.exports = { placeOrder, getOrders, getOrder, cancelOrder, downloadInvoice };
