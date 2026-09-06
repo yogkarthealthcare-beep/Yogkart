@@ -54,12 +54,16 @@ router.get('/orders/:id',          ordersCtrl.getOrder);
 router.patch('/orders/:id/status', ordersCtrl.updateOrderStatus);
 router.delete('/orders/:id',       ordersCtrl.cancelOrder);
 
+const aiPhotoCtrl   = require('../controllers/admin.aiPhoto.controller');
+
 // ── Products ──────────────────────────────────────────
 // IMPORTANT: /products/bulk-stock PEHLE, /products/:id BAAD MEIN
 router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);  // ← PEHLE
 router.post('/products/bulk-deactivate', productsCtrl.bulkDeactivateProducts);
 router.post('/products/bulk-delete',     productsCtrl.bulkDeleteProducts);
 router.post('/products/seo/generate',     productsCtrl.generateSeoPreview);
+router.post('/ai-photo/generate',        aiPhotoCtrl.generatePhoto);
+router.post('/ai-photo/apply',           aiPhotoCtrl.applyPhotoToProduct);
 router.get('/products',                  productsCtrl.getProducts);
 router.get('/products/:id',              productsCtrl.getProduct);
 router.post('/products',                 productsCtrl.createProduct);
