@@ -1,14 +1,26 @@
 const { query } = require('../config/database');
 const { success, error, notFound } = require('../utils/response');
-const { generateProductAiPhoto } = require('../services/aiPhotoStudio.service');
+const {
+  AMAZON_7_TEMPLATES,
+  generateProductAiPhoto,
+  generateAmazon7ImageSet
+} = require('../services/aiPhotoStudio.service');
+
+/**
+ * GET /api/admin/ai-photo/templates
+ * Returns the list of standard Amazon 7 image templates
+ */
+const getTemplates = async (req, res) => {
+  return success(res, { templates: AMAZON_7_TEMPLATES }, 'Amazon 7 templates retrieved');
+};
 
 /**
  * POST /api/admin/ai-photo/generate
- * Generates an AI product photograph with automatic YogKart brand logo watermark
+ * Generates a single AI product photograph with automatic YogKart brand logo watermark
  */
 const generatePhoto = async (req, res) => {
   try {
-    const { productId, productName, templateType, customPrompt } = req.body;
+    const { productId, productName, templateType, customPrompt, geminiApiKey } = req.body;
 
     let targetName = productName;
     if (!targetName && productId) {
@@ -24,8 +36,9 @@ const generatePhoto = async (req, res) => {
 
     const result = await generateProductAiPhoto({
       productName: targetName,
-      templateType: templateType || 'Main Product',
-      customPrompt: customPrompt || ''
+      templateType: templateType || 'Main Product (Hero Shot)',
+      customPrompt: customPrompt || '',
+      geminiApiKey: geminiApiKey || null
     });
 
     const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
@@ -43,8 +56,75 @@ const generatePhoto = async (req, res) => {
 };
 
 /**
+ * POST /api/admin/ai-photo/amazon-7-set
+ * Generates the complete 7-image Amazon set for a single product or batch of products
+ */
+const generateAmazon7Set = async (req, res) => {
+  try {
+    const { productId, productName, products, geminiApiKey, customPrompt } = req.body;
+
+    // Bulk Mode: multiple products
+    if (Array.isArray(products) && products.length > 0) {
+      console.log(`🚀 [AI Studio] Starting Bulk 7-Set Generation for ${products.length} products...`);
+      const bulkResults = [];
+
+      for (const item of products) {
+        let name = item.productName || item.name;
+        const pId = item.productId || item.id;
+
+        if (!name && pId) {
+          const dbP = await query('SELECT name FROM products WHERE id = $1', [pId]);
+          if (dbP.rows.length) name = dbP.rows[0].name;
+        }
+
+        if (name) {
+          const singleSet = await generateAmazon7ImageSet({
+            productName: name,
+            productId: pId,
+            geminiApiKey,
+            customPrompt
+          });
+          bulkResults.push(singleSet);
+        }
+      }
+
+      return success(res, {
+        batchCount: bulkResults.length,
+        results: bulkResults
+      }, `Generated Amazon 7-Image sets for ${bulkResults.length} products`);
+    }
+
+    // Single Product Mode
+    let targetName = productName;
+    let targetId = productId;
+    if (!targetName && targetId) {
+      const prodRes = await query('SELECT name FROM products WHERE id = $1', [targetId]);
+      if (prodRes.rows.length) {
+        targetName = prodRes.rows[0].name;
+      }
+    }
+
+    if (!targetName) {
+      return error(res, 'Product Name or Product ID is required', 400);
+    }
+
+    const setResults = await generateAmazon7ImageSet({
+      productName: targetName,
+      productId: targetId,
+      geminiApiKey,
+      customPrompt
+    });
+
+    return success(res, setResults, `Generated Amazon 7-image suite for ${targetName}`);
+  } catch (err) {
+    console.error('❌ generateAmazon7Set error:', err);
+    return error(res, err.message || 'Failed to generate Amazon 7-image set', 500);
+  }
+};
+
+/**
  * POST /api/admin/ai-photo/apply
- * Applies the generated photo as the product's main thumbnail or gallery image
+ * Applies a single photo as the product's main thumbnail or gallery image
  */
 const applyPhotoToProduct = async (req, res) => {
   try {
@@ -74,7 +154,6 @@ const applyPhotoToProduct = async (req, res) => {
     let updatedProduct;
 
     if (target === 'thumbnail') {
-      // Set as main thumbnail and also ensure it's in images[0]
       if (!currentImages.includes(imageUrl)) {
         currentImages.unshift(imageUrl);
       }
@@ -87,7 +166,6 @@ const applyPhotoToProduct = async (req, res) => {
       );
       updatedProduct = updateRes.rows[0];
     } else {
-      // Add to gallery
       if (!currentImages.includes(imageUrl)) {
         currentImages.push(imageUrl);
       }
@@ -108,7 +186,54 @@ const applyPhotoToProduct = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/admin/ai-photo/apply-7-set
+ * 1-Click updates Product thumbnail (Image 1) and full images array (Images 1-7) in PostgreSQL
+ */
+const applyAmazon7SetToProduct = async (req, res) => {
+  try {
+    const { productId, images } = req.body;
+
+    if (!productId) {
+      return error(res, 'Product ID is required', 400);
+    }
+
+    if (!Array.isArray(images) || images.length === 0) {
+      return error(res, 'At least 1 image URL is required', 400);
+    }
+
+    const validUrls = images.filter(img => typeof img === 'string' && img.trim());
+    if (validUrls.length === 0) {
+      return error(res, 'No valid image URLs provided', 400);
+    }
+
+    const mainThumbnail = validUrls[0];
+
+    const updateRes = await query(
+      `UPDATE products
+       SET thumbnail = $1, images = $2, updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, thumbnail, images`,
+      [mainThumbnail, JSON.stringify(validUrls), productId]
+    );
+
+    if (!updateRes.rows.length) {
+      return notFound(res, 'Product not found in database');
+    }
+
+    return success(res, {
+      product: updateRes.rows[0]
+    }, 'Applied 7 Amazon images to product thumbnail and gallery successfully');
+  } catch (err) {
+    console.error('❌ applyAmazon7SetToProduct error:', err);
+    return error(res, err.message || 'Failed to apply Amazon 7-set to product', 500);
+  }
+};
+
 module.exports = {
+  getTemplates,
   generatePhoto,
-  applyPhotoToProduct
+  generateAmazon7Set,
+  applyPhotoToProduct,
+  applyAmazon7SetToProduct
 };
