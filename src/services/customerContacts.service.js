@@ -242,7 +242,7 @@ const batchInsertContacts = async (records, sourceTable = 'Excel_Import') => {
 };
 
 /**
- * Fetch contacts with search, country filter, pagination, and sorting
+ * Fetch contacts with search, country filter, product filter, pagination, and sorting
  */
 const getCustomerContacts = async ({
   page = 1,
@@ -250,6 +250,7 @@ const getCustomerContacts = async ({
   search = '',
   country = '',
   source_table = '',
+  product_ids = '',
   sortBy = 'id',
   sortOrder = 'DESC'
 }) => {
@@ -261,6 +262,78 @@ const getCustomerContacts = async ({
   const sortCol = validSortCols.includes(sortBy) ? sortBy : 'id';
   const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+  // Parse product_ids if provided
+  let prodIdArray = [];
+  if (product_ids) {
+    if (Array.isArray(product_ids)) {
+      prodIdArray = product_ids.map(x => parseInt(x, 10)).filter(Boolean);
+    } else if (typeof product_ids === 'string') {
+      prodIdArray = product_ids.split(',').map(x => parseInt(x.trim(), 10)).filter(Boolean);
+    }
+  }
+
+  // If product_ids are provided, we query customers from orders/order_items
+  if (prodIdArray.length > 0) {
+    const conditions = [`oi.product_id = ANY($1::bigint[])`];
+    const params = [prodIdArray];
+    let paramIdx = 2;
+
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      conditions.push(`(o.address_name ILIKE $${paramIdx} OR u.email ILIKE $${paramIdx} OR o.address_phone ILIKE $${paramIdx} OR o.address_city ILIKE $${paramIdx} OR oi.name ILIKE $${paramIdx})`);
+      params.push(s);
+      paramIdx++;
+    }
+
+    if (country && country.trim()) {
+      conditions.push(`(o.address_state ILIKE $${paramIdx} OR o.address_city ILIKE $${paramIdx})`);
+      params.push(country.trim());
+      paramIdx++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT o.id)::bigint AS total
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN users u ON u.id = o.user_id
+      ${whereClause}
+    `;
+    const countRes = await query(countQuery, params);
+    const total = parseInt(countRes.rows[0]?.total || '0', 10);
+
+    const dataQuery = `
+      SELECT 
+        o.id,
+        COALESCE(NULLIF(o.address_name, ''), u.name, 'Customer') AS name,
+        COALESCE(u.email, '') AS email,
+        COALESCE(NULLIF(o.address_phone, ''), u.phone, '') AS contact,
+        CONCAT_WS(', ', o.address_line1, o.address_city, o.address_state, o.address_pincode) AS address,
+        COALESCE(o.address_state, 'India') AS country,
+        STRING_AGG(DISTINCT oi.name, ', ') AS source_table,
+        o.created_at
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN users u ON u.id = o.user_id
+      ${whereClause}
+      GROUP BY o.id, o.address_name, u.name, u.email, o.address_phone, u.phone, o.address_line1, o.address_city, o.address_state, o.address_pincode, o.created_at
+      ORDER BY o.created_at DESC
+      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+    `;
+
+    const dataRes = await query(dataQuery, [...params, l, offset]);
+
+    return {
+      contacts: dataRes.rows,
+      total,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil(total / l)
+    };
+  }
+
+  // Otherwise, default query on customer_contacts table (combined with recent order contacts)
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -288,7 +361,38 @@ const getCustomerContacts = async ({
 
   const countQuery = `SELECT COUNT(*)::bigint AS total FROM customer_contacts ${whereClause}`;
   const countRes = await query(countQuery, params);
-  const total = parseInt(countRes.rows[0].total, 10) || 0;
+  let total = parseInt(countRes.rows[0]?.total || '0', 10);
+
+  // If customer_contacts is empty, fallback to order customers
+  if (total === 0 && !search && !country && !source_table) {
+    const orderCountRes = await query(`SELECT COUNT(DISTINCT id)::bigint AS total FROM orders`);
+    const orderTotal = parseInt(orderCountRes.rows[0]?.total || '0', 10);
+    if (orderTotal > 0) {
+      const orderDataQuery = `
+        SELECT 
+          o.id,
+          COALESCE(NULLIF(o.address_name, ''), u.name, 'Customer') AS name,
+          COALESCE(u.email, '') AS email,
+          COALESCE(NULLIF(o.address_phone, ''), u.phone, '') AS contact,
+          CONCAT_WS(', ', o.address_line1, o.address_city, o.address_state, o.address_pincode) AS address,
+          COALESCE(o.address_state, 'India') AS country,
+          'Order Customer' AS source_table,
+          o.created_at
+        FROM orders o
+        LEFT JOIN users u ON u.id = o.user_id
+        ORDER BY o.created_at DESC
+        LIMIT $1 OFFSET $2
+      `;
+      const orderDataRes = await query(orderDataQuery, [l, offset]);
+      return {
+        contacts: orderDataRes.rows,
+        total: orderTotal,
+        page: p,
+        limit: l,
+        totalPages: Math.ceil(orderTotal / l)
+      };
+    }
+  }
 
   const dataQuery = `
     SELECT id, name, email, contact, address, country, source_table, created_at

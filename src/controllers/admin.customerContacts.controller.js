@@ -126,7 +126,7 @@ const batchInsert = async (req, res) => {
  */
 const getContacts = async (req, res) => {
   try {
-    const { page, limit, search, country, source_table, sortBy, sortOrder } = req.query;
+    const { page, limit, search, country, source_table, product_ids, sortBy, sortOrder } = req.query;
 
     const data = await customerContactsService.getCustomerContacts({
       page,
@@ -134,6 +134,7 @@ const getContacts = async (req, res) => {
       search,
       country,
       source_table,
+      product_ids,
       sortBy,
       sortOrder
     });
