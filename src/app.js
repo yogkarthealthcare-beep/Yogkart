@@ -96,14 +96,18 @@ app.use(cors({
 // ── Rate Limiters ─────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max:      200,
+  max:      5000, // Generous limit for high-frequency admin and multi-tab operations
+  skip: (req) => {
+    // Never rate-limit admin API calls or static assets
+    return req.originalUrl?.includes('/admin') || req.path?.includes('/admin') || req.path?.startsWith('/uploads');
+  },
   handler: (req, res) =>
     res.status(429).json({ success: false, message: 'Too many requests, please try again later.' }),
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max:      50,
+  max:      200,
   handler: (req, res) =>
     res.status(429).json({ success: false, message: 'Too many login attempts, please try again later.' }),
 });

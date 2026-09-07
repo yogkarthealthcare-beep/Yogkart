@@ -163,7 +163,7 @@ const applyPhotoToProduct = async (req, res) => {
          SET thumbnail = $1, images = $2, updated_at = NOW() 
          WHERE id = $3 
          RETURNING *`,
-        [imageUrl, JSON.stringify(currentImages), productId]
+        [imageUrl, currentImages, productId]
       );
       updatedProduct = updateRes.rows[0];
     } else {
@@ -175,7 +175,7 @@ const applyPhotoToProduct = async (req, res) => {
          SET images = $1, updated_at = NOW() 
          WHERE id = $2 
          RETURNING *`,
-        [JSON.stringify(currentImages), productId]
+        [currentImages, productId]
       );
       updatedProduct = updateRes.rows[0];
     }
@@ -215,7 +215,7 @@ const applyAmazon7SetToProduct = async (req, res) => {
        SET thumbnail = $1, images = $2, updated_at = NOW()
        WHERE id = $3
        RETURNING id, name, thumbnail, images`,
-      [mainThumbnail, JSON.stringify(validUrls), productId]
+      [mainThumbnail, validUrls, productId]
     );
 
     if (!updateRes.rows.length) {
