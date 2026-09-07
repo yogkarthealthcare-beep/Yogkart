@@ -55,55 +55,89 @@ const AMAZON_7_TEMPLATES = [
 ];
 
 /**
- * Builds Amazon-optimized prompts for each of the 7 image types
+ * Builds Amazon-optimized prompts for each of the 7 image types matching strict 1600x1600 1:1 guidelines
  */
 function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product (Hero Shot)', customNotes = '') {
   const cleanName = String(productName || '').trim();
+  const extra = customNotes ? ` Special client instructions: ${customNotes}.` : '';
 
-  let sceneDesc = '';
   switch (templateType) {
     case 'Main Product (Hero Shot)':
     case 'Main Product':
-      sceneDesc = `on a pure solid seamless white background (#FFFFFF), soft subtle natural contact shadow beneath the product, crisp real packaging with clear 'YogKart' branding and label, centered in frame filling 85% area, pristine Amazon marketplace hero main image standard, studio lighting, razor sharp focus, 8k resolution`;
-      break;
+    case '1. Clean White Hero Shot':
+      return `Create a premium Amazon MAIN PRODUCT IMAGE for '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels resolution with a 1:1 square aspect ratio.
+PRODUCT ACCURACY: The product '${cleanName}' must remain 100% authentic with exact packaging, shape, bottle, jar, box, cap, brand logo, label, typography, colors and proportions. Do not alter packaging or add extra products.
+COMPOSITION: Place the complete product naturally in the center of the square canvas, occupying 75–85% of image height with balanced white margins. Do not crop any part. Product faces camera naturally and is clearly readable.
+BACKGROUND: Pure clean seamless white background (#FFFFFF). No colored background, no props, no lifestyle items, no decorative objects.
+LIGHTING & STYLE: Professional studio lighting, bright clean illumination, soft subtle grounding contact shadow beneath product. Photorealistic, ultra-sharp, high resolution, realistic textures and reflections, clean commercial catalog photography. No people, no hands, no watermarks, no claims.${extra}`;
 
     case 'Benefits & Features Infographic':
-      sceneDesc = `professional Amazon e-commerce infographic layout for '${cleanName}'. Centered product packaging with clean graphic badge callouts around it highlighting '100% Natural Ayurvedic Formula', 'Clinically Tested Quality', 'Pure Herbal Extraction', 'No Harmful Toxins', clean minimalist pastel green badges, soft studio illumination, crisp macro detail`;
-      break;
+    case '2. Key Benefits Infographic':
+      return `Create a premium AMAZON PRODUCT BENEFITS INFOGRAPHIC for '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels, 1:1 square aspect ratio. All text and elements completely inside square canvas.
+PRODUCT ACCURACY: Keep '${cleanName}' completely unchanged, authentic logo, label, shape, typography and colors.
+LAYOUT: Clean premium infographic with '${cleanName}' prominently positioned in center or slightly right. Around the product, present 4–6 key wellness benefits relevant to '${cleanName}', each with a clean minimal icon, short headline, and one-line supporting description (e.g., 'Deep Nourishment', 'Supports Vitality', 'Pure Ayurvedic Extract', '100% Natural Formula', 'Gentle Care').
+DESIGN & BACKGROUND: Premium modern wellness/beauty e-commerce infographic, clean typography, strong visual hierarchy, mobile-friendly readability, subtle premium background complementing product.${extra}`;
 
     case 'Lifestyle & In-Use with Model':
     case 'Lifestyle':
-      sceneDesc = `lifestyle commercial photograph of an attractive Indian person smiling gently and holding '${cleanName}' in a bright modern aesthetic bathroom with soft morning natural sunlight streaming through window, wooden vanity shelf, fresh green herbal plants in background, warm authentic wellness mood, high-end commercial advertising photography`;
-      break;
+    case '3. Lifestyle Shot with Model':
+      return `Create a premium lifestyle product photograph featuring '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels with a 1:1 square aspect ratio.
+PRODUCT ACCURACY: Exact '${cleanName}' product packaging unchanged, authentic logo, label, packaging colors and proportions.
+MODEL: Realistic attractive adult model appropriate for wellness/personal care category, natural skin texture, realistic facial proportions, relatable and confident expression, naturally holding and displaying '${cleanName}'.
+SCENE & COMPOSITION: Premium serene lifestyle environment (morning wellness routine / aesthetic self-care setting). Balanced square framing, soft lifestyle lighting, natural highlights, realistic shadows, subtle depth of field.
+STYLE: Luxury e-commerce lifestyle photography, photorealistic, high-end commercial advertising.${extra}`;
 
     case 'How to Use / Step-by-Step with Model':
     case 'How to Use':
-      sceneDesc = `commercial step-by-step application guide for '${cleanName}'. An Indian model gently applying and demonstrating the product ritual, clean visual numbered cue steps (Step 1, Step 2, Step 3), serene self-care atmosphere, clear water droplets, aesthetic cotton towel, pristine instructive advertising shot`;
-      break;
+    case '4. Step-by-Step Guide with Model':
+      return `Create a premium HOW-TO-USE / USE CASE infographic for '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels with a 1:1 square aspect ratio. All steps and text fit inside square canvas.
+PRODUCT ACCURACY: Strict product accuracy for '${cleanName}', authentic packaging, logo and proportions.
+LAYOUT: 3–4 simple numbered usage steps (Step 1 Prepare, Step 2 Apply / Use, Step 3 Follow Technique, Step 4 Finish). Each step contains number indicator, visual demonstration by model, and short explanatory text.
+DESIGN: Premium Amazon infographic, clean, compact, mobile-friendly typography, strong visual hierarchy, clean premium background, clearly separated steps.${extra}`;
 
     case 'YogKart vs Other Brands (Comparison)':
     case 'Comparison':
-      sceneDesc = `side-by-side e-commerce comparison graphic. Left side features premium YogKart '${cleanName}' highlighted with green checkmarks (100% Organic, Ayurvedic Purity, Eco-Friendly, Chemical-Free). Right side shows generic competitor container with red cross marks (Added Preservatives, Harsh Chemicals, Cheap Plastic), clean professional comparison chart aesthetic`;
-      break;
+    case '5. YogKart vs Other Brands':
+    case '5. YogKart vs Other Brands (Pros & Cons)':
+      return `Create a premium PRODUCT COMPARISON INFOGRAPHIC featuring '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels, 1:1 square aspect ratio.
+LAYOUT: Balanced split-screen composition.
+LEFT SIDE: Headline 'OUR PRODUCT' featuring '${cleanName}' prominently with green checkmarks (100% Pure Ayurvedic Organic, Zero Harmful Chemicals, Premium Quality, Lab Tested).
+RIGHT SIDE: Headline 'OTHER / TYPICAL ALTERNATIVE' showing generic unbranded product with red cross marks (Synthetic Fillers, Harsh Chemicals, Cheap Plastic Packaging).
+DESIGN: 4–6 meaningful comparison points, clean checkmarks, professional modern Amazon infographic aesthetic, informative, premium and credible.${extra}`;
 
     case 'Ayurvedic Ingredients Deep Dive':
     case 'Ingredients':
-      sceneDesc = `deep-dive herbal ingredient breakdown for '${cleanName}'. Product bottle placed on clean light stone, surrounded by raw organic botanicals, whole fresh herbs, roots, wooden spoon with natural pure extract, fresh green leaves, soft bright studio lighting, pure authentic Ayurvedic wellness aesthetics`;
-      break;
+    case '6. Raw Ingredients & Health Benefits':
+    case "Ingredients / What's Inside Infographic":
+      return `Create a premium INGREDIENTS / WHAT'S INSIDE infographic for '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels with a 1:1 square aspect ratio.
+PRODUCT ACCURACY: Exact '${cleanName}' product in center with unchanged packaging, logo and colors.
+COMPOSITION: '${cleanName}' placed prominently in center, surrounded by realistic whole raw botanicals, fresh Ayurvedic herbs, roots, pure extracts in a balanced structured layout. Each ingredient with realistic visual representation, ingredient name, and short factual benefit statement.
+DESIGN: Premium clean beauty/wellness infographic, realistic ingredient photography, minimal clutter, clear typography, professional e-commerce presentation.${extra}`;
 
     case 'Packaging & Trust Guarantee':
     case 'Trust & Certifications':
-      sceneDesc = `trust and certification showcase for YogKart '${cleanName}'. Premium eco-friendly packaging with elegant gold and green certification badges: 'GMP Certified', '100% Organic & Ayurvedic', 'Cruelty Free', 'Satisfaction Guarantee', solid premium studio pedestal, luxury soft lighting`;
-      break;
+    case '7. Trust, Certifications & Eco-Packaging':
+    case 'Real-Life Product Usage':
+    case '7. Real-Life Product Usage':
+      return `Create a premium REAL-LIFE PRODUCT USAGE photograph using '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels with a 1:1 square aspect ratio.
+PRODUCT ACCURACY: '${cleanName}' packaging 100% authentic and clearly recognizable in model's hand or in scene.
+MODEL & USAGE: Realistic adult model actively USING the product with natural hand movements and correct anatomy. Demonstrates natural daily application technique communicating 'THIS IS HOW I USE THIS PRODUCT'.
+SCENE & LIGHTING: Premium clean lifestyle environment, soft commercial lighting, realistic skin texture and natural highlights.
+STYLE: Luxury e-commerce lifestyle photography, photorealistic, high-end commercial product advertising.${extra}`;
 
     default:
-      sceneDesc = `commercial e-commerce product shot of '${cleanName}' on pure clean studio background, studio lighting, hyper-realistic, 8k crisp details`;
-      break;
+      return `Create a premium commercial Amazon product photography of '${cleanName}'.
+IMAGE SIZE: Exact 1600 × 1600 pixels, 1:1 square format.
+PRODUCT ACCURACY: '${cleanName}' with exact authentic packaging, logo and colors.
+BACKGROUND: Pure seamless studio background, high-end commercial studio lighting, ultra-sharp 8k resolution, photorealistic.${extra}`;
   }
-
-  const extra = customNotes ? ` Additional instructions: ${customNotes}.` : '';
-
-  return `Commercial Amazon product photography of '${cleanName}', ${sceneDesc}.${extra} Sharp focus, authentic packaging, 8k resolution, photorealistic, no watermarks, no gibberish text.`;
 }
 
 /**
