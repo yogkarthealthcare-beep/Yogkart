@@ -9,119 +9,415 @@ const BRAND_LOGO_PATH = path.resolve(__dirname, '../assets/brand_logo.png');
 /**
  * Amazon 7-Set Standard Template Configurations
  */
+/**
+ * Amazon 7-Set Standard Template Configurations
+ */
 const AMAZON_7_TEMPLATES = [
   {
     id: 1,
-    type: 'Main Product (Hero Shot)',
-    title: '1. Clean White Hero Shot',
-    description: 'Pure white background (#FFFFFF), subtle soft grounding shadow, retail box + tube packaging with YogKart branding, Amazon catalog hero shot standard (1600x1600).'
+    type: 'Main Product Image — White Background',
+    title: '1. Main Product Image — White Background',
+    description: 'Pure clean white background (#FFFFFF), centered product occupying 75–85% frame height, soft grounding shadow, 1600x1600 1:1 square ratio Amazon hero standard.'
   },
   {
     id: 2,
-    type: 'Benefits & Features Infographic',
-    title: '2. Skin Care Journey & Key Benefits',
-    description: 'Targeted care infographic with before/after journey, benefit callout badges, and centered product packaging.'
+    type: 'Product Benefits / Key Benefits',
+    title: '2. Product Benefits / Key Benefits',
+    description: 'Sophisticated infographic layout with centered/right product, 4–6 key product benefits with clean icons, clear visual hierarchy, Amazon-compliant claims.'
   },
   {
     id: 3,
-    type: 'Ayurvedic Ingredients Deep Dive',
-    title: '3. Ingredients & Botanical Extracts',
-    description: 'Surrounded by fresh raw botanicals (Algae, Cocoa Butter, Gotu Kola, Herbal Extracts) with clean ingredient callouts.'
+    type: 'Model / Lifestyle Image',
+    title: '3. Model / Lifestyle Image',
+    description: 'Natural, relatable adult model in a premium everyday lifestyle environment holding or displaying the product with soft commercial lighting.'
   },
   {
     id: 4,
-    type: 'How to Use / Step-by-Step with Model',
-    title: '4. Step-by-Step How to Use Guide',
-    description: 'Simple 4-step daily application ritual guide (Cleanse, Dispense, Massage, Daily Care).'
+    type: 'How to Use / Use Cases',
+    title: '4. How to Use / Use Cases',
+    description: 'Structured 3–4 step visual application guide (Step 1 Prepare, Step 2 Apply/Use, Step 3 Massage/Technique, Step 4 Finish) with numbered steps and mobile readability.'
   },
   {
     id: 5,
-    type: 'YogKart vs Other Brands (Comparison)',
-    title: '5. YogKart vs Other Brands',
-    description: 'Side-by-side comparison matrix showing YogKart (100% Pure & Organic) vs Other Market Brands (Chemicals, Fillers).'
+    type: 'Our Product vs Other Product / Comparison',
+    title: '5. Our Product vs Other Product / Comparison',
+    description: 'Side-by-side comparison matrix: Our Product (prominent packaging with green checkmarks) vs Other Alternative (generic unbranded package with red crosses).'
   },
   {
     id: 6,
-    type: 'Lifestyle & In-Use with Model',
-    title: '6. Lifestyle Shot with Model',
-    description: 'Luxury lifestyle presentation in aesthetic morning wellness setting with model holding the product.'
+    type: 'Ingredients / What’s Inside',
+    title: '6. Ingredients / What’s Inside',
+    description: 'Centered product surrounded by realistic fresh raw botanical ingredient visuals, clear ingredient names, and short functional benefit statements.'
   },
   {
     id: 7,
-    type: 'Packaging & Trust Guarantee',
-    title: '7. Trust, Certifications & Eco-Packaging',
-    description: 'GMP Certified, 100% Ayurvedic, Cruelty-Free, Satisfaction Guaranteed trust badges.'
+    type: 'Model Actually Using the Product — Demonstration',
+    title: '7. Model Actually Using the Product — Demonstration',
+    description: 'Real-life product usage demonstration photograph showing a realistic adult model actively and correctly applying/using the product with natural anatomy.'
   }
 ];
 
 /**
- * Builds Amazon-optimized prompts for generating brand-new 3D photorealistic product packaging from scratch
+ * Builds Amazon-optimized prompts matching the exact 7-image listing specification
  */
-function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product (Hero Shot)', customNotes = '') {
+function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product Image — White Background', customNotes = '', productData = null) {
   const cleanName = String(productName || '').trim();
-  const extra = customNotes ? ` ${customNotes}.` : '';
+  const extra = customNotes ? ` Additional instructions: ${customNotes}.` : '';
 
-  switch (templateType) {
-    // ─────────────────────────────────────────────────────────────
-    // 1. MAIN PRODUCT HERO SHOT (Pure White #FFFFFF, 1600x1600)
-    // ─────────────────────────────────────────────────────────────
-    case 'Main Product (Hero Shot)':
-    case 'Main Product':
-    case '1. Clean White Hero Shot':
-      return `Commercial 3D product render and studio catalog photography of '${cleanName}' by YogKart. Realistic modern luxury packaging with retail carton packaging box and matching cosmetic tube or bottle standing side-by-side, elegant eco-friendly kraft paper texture and cream colors, clean authentic 'YogKart' logo printed clearly on the label, solid pure white seamless background (#FFFFFF), soft delicate grounding contact shadow beneath, bright commercial studio lighting, ultra-sharp focus, 8k resolution, photorealistic, pristine Amazon marketplace hero listing image.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 2. SKIN CARE JOURNEY & KEY BENEFITS INFOGRAPHIC
-    // ─────────────────────────────────────────────────────────────
-    case 'Benefits & Features Infographic':
-    case '2. Key Benefits Infographic':
-    case '2. Skin Care Journey & Key Benefits':
-      return `Commercial Amazon product listing infographic for YogKart '${cleanName}'. Beautiful centered luxury cosmetic tube and packaging box on soft beige marble pedestal. High-end e-commerce infographic layout with clean modern minimalist typography callout badges and icons highlighting natural skin elasticity, 95% plant-derived herbs, and deep hydration. Clean aesthetic, soft diffuse studio lighting, 8k resolution, photorealistic.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 3. INGREDIENTS & WHAT'S INSIDE INFOGRAPHIC
-    // ─────────────────────────────────────────────────────────────
-    case 'Ayurvedic Ingredients Deep Dive':
-    case 'Ingredients':
-    case '3. Ingredients & Botanical Extracts':
-      return `Luxury Amazon ingredients breakdown infographic for YogKart '${cleanName}'. Premium herbal cream bottle and tube placed in center, surrounded by fresh real whole botanical ingredients (green algae seaweed, brown fucus extract, raw cocoa butter chunks, fresh green gotu kola leaves, olive leaves) with clean modern leader lines and ingredient callouts. High-end beauty advertising photography, soft studio illumination, crisp macro details, 8k resolution, photorealistic.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 4. STEP-BY-STEP HOW TO USE GUIDE
-    // ─────────────────────────────────────────────────────────────
-    case 'How to Use / Step-by-Step with Model':
-    case 'How to Use':
-    case '4. Step-by-Step How to Use Guide':
-    case '4. Step-by-Step Guide with Model':
-      return `Amazon how-to-use step-by-step visual application guide for YogKart '${cleanName}'. Beautiful serene bathroom setting, 4 clean numbered steps showing natural skincare ritual, elegant cream application on smooth skin, soft morning sunlight, luxury wellness aesthetic, 8k resolution, photorealistic commercial guide.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 5. YOGKART VS OTHER BRANDS (COMPARISON)
-    // ─────────────────────────────────────────────────────────────
-    case 'YogKart vs Other Brands (Comparison)':
-    case 'Comparison':
-    case '5. YogKart vs Other Brands':
-    case '5. YogKart vs Other Brands (Pros & Cons)':
-      return `Side-by-side Amazon comparison infographic. Left side features premium YogKart '${cleanName}' in luxury eco-friendly packaging with green verified checkmarks (100% Pure, Organic, No Harmful Chemicals). Right side shows generic unbranded dull gray container with red cross marks. Clean modern e-commerce comparison chart layout, high resolution, photorealistic.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 6. LIFESTYLE SHOT WITH MODEL
-    // ─────────────────────────────────────────────────────────────
-    case 'Lifestyle & In-Use with Model':
-    case 'Lifestyle':
-    case '3. Lifestyle Shot with Model':
-    case '6. Lifestyle Shot with Model':
-      return `Luxury commercial lifestyle advertising photography for YogKart '${cleanName}'. An attractive Indian woman with radiant glowing skin gently applying the cream in a sunlit modern aesthetic bathroom. Soft natural morning sunlight, linen towel, fresh green plants in background, natural skin texture, commercial advertising standard, 8k resolution, photorealistic.${extra}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 7. TRUST, CERTIFICATIONS & QUALITY GUARANTEE
-    // ─────────────────────────────────────────────────────────────
-    case 'Packaging & Trust Guarantee':
-    case 'Trust & Certifications':
-    case '7. Trust, Certifications & Eco-Packaging':
-    default:
-      return `Premium trust and certification showcase for YogKart '${cleanName}'. Elegant pedestal display with gold and emerald certification badges: 'GMP Certified', '100% Ayurvedic & Organic', 'Cruelty Free', 'Satisfaction Guarantee', luxury packaging presentation, soft studio lighting, 8k resolution, photorealistic commercial advertising.${extra}`;
+  // Extract ingredients/benefits if in productData
+  let ingredientsText = '';
+  if (productData?.ingredients_list) {
+    ingredientsText = Array.isArray(productData.ingredients_list)
+      ? productData.ingredients_list.join(', ')
+      : String(productData.ingredients_list);
   }
+
+  let benefitsText = '';
+  if (productData?.key_benefits) {
+    benefitsText = Array.isArray(productData.key_benefits)
+      ? productData.key_benefits.join(', ')
+      : String(productData.key_benefits);
+  }
+
+  const normalized = String(templateType || '').toLowerCase();
+
+  // ─────────────────────────────────────────────────────────────
+  // 1️⃣ MAIN PRODUCT IMAGE — WHITE BACKGROUND
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('white') || normalized.includes('hero') || normalized.startsWith('1')) {
+    return `Create a premium Amazon-compliant MAIN PRODUCT IMAGE for '${cleanName}' by YogKart.
+
+PRODUCT:
+Use the EXACT product packaging, bottle/jar/tube/box, cap, and proportions for '${cleanName}' by YogKart.
+
+STRICT PRODUCT ACCURACY:
+* Use the exact same product, packaging, bottle/jar/tube/box, cap and proportions.
+* Do NOT redesign the packaging.
+* Do NOT change the product shape, size, logo, brand name 'YogKart', label, typography, colors or graphics.
+* All visible product text must remain accurate and undistorted.
+* Do not add any extra products.
+
+COMPOSITION:
+* Place the product standing naturally in the center of the frame.
+* Product should occupy approximately 75–85% of the image height while maintaining comfortable margins.
+* Show the complete product clearly from the front.
+* Maintain realistic premium commercial product photography.
+
+BACKGROUND:
+* Pure clean white background (#FFFFFF).
+* No colored background.
+* No lifestyle environment.
+* No decorative elements.
+
+LIGHTING:
+* Bright professional studio lighting.
+* Soft natural-looking illumination.
+* Very subtle realistic grounding shadow directly underneath/behind the product.
+* Shadow must be light and elegant, never dramatic.
+
+STYLE:
+* Premium Amazon e-commerce product photography.
+* Ultra-clean, sharp, realistic, 8k high resolution.
+* Accurate materials, reflections and textures.
+* No excessive glow, no artificial effects.
+
+IMPORTANT:
+This is the PRIMARY Amazon product image.
+Keep the image simple and product-focused.
+No people, no props, no badges, no promotional text, no icons, no claims, no additional objects.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2️⃣ PRODUCT BENEFITS / KEY BENEFITS INFOGRAPHIC
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('benefit') || normalized.startsWith('2')) {
+    const benefitBullets = benefitsText
+      ? `Highlighted verified benefits: ${benefitsText}`
+      : `Short, clear benefit statements such as 'Deep Hydration', 'Helps Nourish Skin', 'Supports Healthy-Looking Skin', 'Lightweight & Easy to Use', 'Suitable for Daily Use'`;
+
+    return `Create a premium Amazon PRODUCT BENEFITS INFOGRAPHIC for '${cleanName}' by YogKart.
+
+PRODUCT:
+Use the EXACT product packaging for '${cleanName}' by YogKart.
+The product packaging must remain completely unchanged.
+
+STRICT PRODUCT ACCURACY:
+Do not modify the product bottle/jar/tube/box, logo, label, typography, colors, proportions or packaging design.
+
+LAYOUT:
+Create a sophisticated premium infographic with:
+* The exact product prominently positioned in the center/right.
+* Clean visual hierarchy.
+* 4–6 key product benefits arranged around the product.
+* Each benefit should have a simple elegant supporting icon or visual element.
+* Keep enough negative space so the image does not look crowded.
+
+BENEFIT CONTENT:
+* ${benefitBullets}.
+* Use only benefits that are genuinely appropriate for the specific product.
+* Do NOT invent medical claims.
+* Do NOT make disease-treatment, cure, guaranteed-result or exaggerated claims.
+
+TEXT STYLE:
+Short, clear, Amazon-friendly benefit statements.
+
+DESIGN:
+* Premium modern e-commerce infographic.
+* Clean typography.
+* Professional wellness/beauty brand aesthetic.
+* Balanced spacing.
+* Visually appealing but not overcrowded.
+
+BACKGROUND:
+Use a clean premium background that complements the product category while keeping the product highly visible.
+
+IMPORTANT:
+The product itself must remain exactly the same as the reference.
+No packaging redesign.
+No fake ingredients.
+No misleading claims.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 3️⃣ MODEL / LIFESTYLE IMAGE
+  // ─────────────────────────────────────────────────────────────
+  if ((normalized.includes('lifestyle') && !normalized.includes('demonstration') && !normalized.includes('using')) || normalized.startsWith('3')) {
+    return `Create a premium lifestyle product image featuring '${cleanName}' by YogKart.
+
+PRODUCT ACCURACY — CRITICAL:
+* Use the exact product packaging, bottle/jar/tube/box, cap, and label for '${cleanName}' by YogKart.
+* Do not redesign, recolor, resize unnaturally, replace or modify the packaging.
+* Keep the logo, label, product shape, cap and branding accurate and clearly visible.
+
+MODEL:
+* Show an attractive, natural-looking adult model appropriate for the product category.
+* The model should look realistic, healthy and relatable.
+* Use natural skin texture and realistic facial/body proportions.
+* Avoid overly retouched or artificial-looking skin.
+
+SCENE:
+* Create a premium lifestyle environment relevant to the product.
+* The environment should communicate how the product fits naturally into everyday life.
+
+PRODUCT PLACEMENT:
+* The model should naturally hold, display or interact with the product depending on its category.
+* The product must remain clearly visible and recognizable.
+
+COMPOSITION:
+* Premium commercial advertising photography.
+* Natural pose.
+* Elegant composition.
+* Product should receive strong visual attention without looking artificially inserted.
+
+LIGHTING:
+* Soft professional studio/lifestyle lighting.
+* Natural highlights.
+* Realistic shadows.
+* Premium photography depth.
+
+BACKGROUND:
+* Clean, sophisticated environment with subtle depth-of-field.
+* No unnecessary objects.
+
+IMPORTANT:
+Do not add unrelated products.
+Do not change product packaging.
+Do not create unrealistic product usage.
+Do not make medical or exaggerated claims.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 4️⃣ HOW TO USE / USE CASES INFOGRAPHIC
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('how to use') || normalized.includes('step') || normalized.startsWith('4')) {
+    return `Create a premium HOW-TO-USE / USE CASE infographic for '${cleanName}' by YogKart.
+
+PRODUCT:
+Use the exact product packaging for '${cleanName}' by YogKart.
+Packaging, logo, label, shape, colors and proportions must remain unchanged.
+
+OBJECTIVE:
+Visually explain how the customer should use the product in a simple step-by-step format.
+
+LAYOUT:
+Create 3–4 clearly separated usage steps:
+
+STEP STRUCTURE:
+* Step 1 — Prepare: Show the appropriate preparation before using the product.
+* Step 2 — Apply / Use: Show the correct way to use or dispense the product.
+* Step 3 — Massage / Action: Show the appropriate motion or usage technique depending on the product.
+* Step 4 — Finish: Show the final recommended action after use, if applicable.
+
+Each step should include:
+* Clear visual demonstration.
+* Small numbered indicator.
+* Very short explanatory text.
+* Clean supporting icons where useful.
+
+PRODUCT USAGE:
+* The usage demonstration must be realistic and appropriate for '${cleanName}'.
+* Do not demonstrate an incorrect application method.
+
+DESIGN:
+* Premium Amazon infographic.
+* Clean, compact and easy to understand.
+* Professional wellness/beauty aesthetic.
+* High readability on mobile screens.
+
+IMPORTANT:
+Do not invent instructions that are not appropriate for the product.
+Do not modify the actual product packaging.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 5️⃣ OUR PRODUCT VS OTHER PRODUCT / COMPARISON
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('vs') || normalized.includes('comparison') || normalized.startsWith('5')) {
+    return `Create a premium PRODUCT COMPARISON infographic featuring '${cleanName}' by YogKart.
+
+PRODUCT:
+Use the exact product packaging for '${cleanName}' by YogKart on the "OUR PRODUCT" side.
+Do not alter its packaging, logo, label, shape, colors or proportions.
+
+LAYOUT:
+Create a clean side-by-side comparison:
+
+LEFT:
+"OUR PRODUCT"
+* Show the exact YogKart '${cleanName}' product prominently.
+* Include bright green checkmarks highlighting key qualities: 100% Pure & Natural, Authentic Ayurvedic Formulation, No Harmful Chemicals, Premium Quality Standard, Lab Tested & Safe, Transparent Ingredients.
+
+RIGHT:
+"OTHER / TYPICAL ALTERNATIVE"
+* Represent a generic competing/alternative product using a completely GENERIC, unbranded package.
+* Include red cross icons indicating: Harsh Chemicals, Low Active Potency, Synthetic Fillers & Dyes, Artificial Fragrance.
+
+IMPORTANT:
+* Never copy another company's logo, trademark, packaging design or identifiable branding.
+
+COMPARISON:
+Show 4–6 meaningful comparison points relevant to the product category:
+* Ingredient transparency
+* Convenient application
+* Packaging quality
+* Everyday usability
+* Product experience
+* Formulation approach
+
+Use checkmarks, neutral comparison icons and concise text.
+
+CLAIMS:
+* Only use factual and supportable differences.
+* Do NOT make false claims such as "100% better", "No.1", "best in the market", "competitors are harmful", etc.
+
+DESIGN:
+* Premium modern Amazon comparison infographic.
+* Clean split layout.
+* Strong visual hierarchy.
+* Easy to understand within a few seconds.
+* Professional typography.
+
+IMPORTANT:
+The comparison must look credible, premium and informative—not aggressive or misleading.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 6️⃣ INGREDIENTS / WHAT’S INSIDE INFOGRAPHIC
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('ingredient') || normalized.includes('inside') || normalized.startsWith('6')) {
+    const ingSection = ingredientsText
+      ? `Specific product formulation ingredients: ${ingredientsText}`
+      : `Botanical ingredients such as Aloe Vera ("Helps soothe and hydrate"), Vitamin E ("Antioxidant support"), Ayurvedic Extracts ("Deep nourishment & care"), Natural Botanicals ("Revitalizing properties")`;
+
+    return `Create a premium INGREDIENTS / WHAT'S INSIDE infographic for '${cleanName}' by YogKart.
+
+PRODUCT ACCURACY:
+Use the exact product packaging for '${cleanName}' by YogKart.
+Do not change the packaging, bottle/jar/tube, label, logo, colors, typography or proportions.
+
+OBJECTIVE:
+Clearly communicate the important ingredients contained in the product.
+
+COMPOSITION:
+* Place the exact product prominently in the center.
+* Around the product, display visually appealing ingredient representations based on the actual ingredients:
+  ${ingSection}.
+
+FOR EVERY INGREDIENT:
+* Show a realistic visual representation.
+* Add the ingredient name.
+* Add one short, simple benefit/function statement when appropriate.
+
+IMPORTANT:
+* Only show ingredients that are genuinely present in the product.
+* Do not invent ingredients.
+* Do not imply that an ingredient provides medical treatment.
+* Do not exaggerate benefits.
+
+DESIGN:
+* Premium clean beauty/wellness infographic.
+* Realistic ingredient photography.
+* Elegant arrangement.
+* Minimal clutter.
+* Strong product visibility.
+* The ingredient visuals should look natural and premium, not like random decorative stock images.${extra}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 7️⃣ MODEL ACTUALLY USING THE PRODUCT — DEMONSTRATION
+  // ─────────────────────────────────────────────────────────────
+  if (normalized.includes('demonstration') || normalized.includes('using') || normalized.includes('trust') || normalized.startsWith('7')) {
+    return `Create a premium REAL-LIFE PRODUCT USAGE photograph using '${cleanName}' by YogKart.
+
+PRODUCT:
+Use the exact product packaging for '${cleanName}' by YogKart.
+Packaging must remain completely unchanged.
+Do not alter the product shape, logo, label, colors, cap, typography or proportions.
+
+MODEL:
+* Show a realistic adult model actually USING the product correctly.
+* The model should naturally demonstrate the application/use of the product.
+
+USAGE:
+* Show the exact practical action a real customer would perform when using this product.
+* Skincare / Haircare / Wellness: Model gently applying or using the product with correct natural technique.
+
+PRODUCT VISIBILITY:
+* The product must be clearly visible in the model's hand or positioned naturally within the scene.
+* The customer's attention should immediately understand: "THIS IS HOW I USE THIS PRODUCT."
+
+POSE:
+* Natural hand movement.
+* Realistic application.
+* No awkward fingers.
+* No distorted anatomy.
+* No impossible positioning.
+
+SCENE:
+* Premium clean lifestyle environment appropriate for the product.
+* Minimal background distractions.
+* Natural depth of field.
+
+LIGHTING:
+* Soft professional commercial photography.
+* Realistic skin texture.
+* Natural shadows and highlights.
+
+STYLE:
+* Luxury e-commerce lifestyle photography.
+* Photorealistic, 8k resolution.
+* High-end Amazon brand presentation.
+
+IMPORTANT:
+Do not demonstrate incorrect usage.
+Do not modify the product.
+Do not add unrelated products.
+Do not make medical claims.
+Do not create unrealistic before/after results.${extra}`;
+  }
+
+  // Fallback
+  return `Commercial 3D product render and studio catalog photography of '${cleanName}' by YogKart. Solid pure white background (#FFFFFF), subtle grounding shadow, Amazon 1600x1600 1:1 square ratio, premium commercial advertising quality, ultra-sharp focus, 8k resolution, photorealistic.${extra}`;
 }
 
 /**
@@ -261,15 +557,15 @@ function saveGeneratedProductImage(imageBuffer, filename) {
 /**
  * Single AI Photo Generation from scratch
  */
-async function generateProductAiPhoto({ productName, templateType = 'Main Product (Hero Shot)', customPrompt = '', geminiApiKey = null }) {
+async function generateProductAiPhoto({ productName, productData = null, templateType = 'Main Product Image — White Background', customPrompt = '', geminiApiKey = null }) {
   if (!productName || !productName.trim()) {
     throw new Error('Product Name is required');
   }
 
   console.log(`🎨 [AI Studio] Generating scratch AI image for '${productName}' [${templateType}]...`);
 
-  // Build high-yield prompt for scratch 3D commercial photography
-  const prompt = buildAmazonPhotographyPrompt(productName, templateType, customPrompt);
+  // Build high-yield prompt matching Amazon 7-Set specification
+  const prompt = buildAmazonPhotographyPrompt(productName, templateType, customPrompt, productData);
 
   const rawBuffer = await fetchAiImageBuffer(prompt, geminiApiKey);
   const finalBuffer = await compositeBrandLogo(rawBuffer, 1600);
@@ -287,6 +583,7 @@ async function generateProductAiPhoto({ productName, templateType = 'Main Produc
     filename,
     templateType,
     productName,
+    prompt,
     size: '1600x1600'
   };
 }
@@ -294,13 +591,14 @@ async function generateProductAiPhoto({ productName, templateType = 'Main Produc
 /**
  * Bulk / Set AI Photo Generation (Generates all 7 Amazon images from scratch)
  */
-async function generateAmazon7ImageSet({ productName, productId = null, geminiApiKey = null, customPrompt = '' }) {
+async function generateAmazon7ImageSet({ productName, productId = null, productData = null, geminiApiKey = null, customPrompt = '' }) {
   const generatedImages = [];
 
   for (const template of AMAZON_7_TEMPLATES) {
     try {
       const result = await generateProductAiPhoto({
         productName,
+        productData,
         templateType: template.type,
         customPrompt,
         geminiApiKey
@@ -312,7 +610,8 @@ async function generateAmazon7ImageSet({ productName, productId = null, geminiAp
         title: template.title,
         description: template.description,
         imageUrl: result.imageUrl,
-        filename: result.filename
+        filename: result.filename,
+        prompt: result.prompt
       });
     } catch (err) {
       console.error(`❌ Failed to generate template ${template.title}:`, err.message);
@@ -336,6 +635,8 @@ async function generateAmazon7ImageSet({ productName, productId = null, geminiAp
 
 module.exports = {
   AMAZON_7_TEMPLATES,
+  buildAmazonPhotographyPrompt,
   generateProductAiPhoto,
   generateAmazon7ImageSet
 };
+
