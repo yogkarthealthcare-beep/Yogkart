@@ -51,10 +51,12 @@ router.all('/deploy-pull', (req, res) => {
   console.log('🚀 [Auto-Deploy] Triggering VPS git pull & pm2 restart...');
 
   const isWin = process.platform === 'win32';
-  const workDir = isWin ? process.cwd() : '/var/www/yogkart_backend';
+  const fs = require('fs');
+  const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
+  const workDir = isWin ? process.cwd() : defaultDir;
   const shell = isWin ? 'cmd.exe' : '/bin/bash';
   const pullCmd = 'git pull origin main';
-  const restartCmd = isWin ? 'echo Dev environment restart skipped' : 'pm2 restart all';
+  const restartCmd = isWin ? 'echo Dev environment restart skipped' : 'export PATH=/root/.nvm/versions/node/v22.16.0/bin:$PATH; pm2 restart yogkart || pm2 restart all';
 
   exec(pullCmd, { cwd: workDir, shell }, (pullErr, pullStdout, pullStderr) => {
     if (pullErr) {

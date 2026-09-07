@@ -1,9 +1,12 @@
 const app = require('./app');
 const { testConnection } = require('./config/database');
+const { ensureDatabaseSchema } = require('./services/schema.service');
 const { ensurePaymentGatewaySchema } = require('./services/paymentGatewaySettings.service');
 const { ensureProductSeoSchema } = require('./services/productSeo.service');
 const { ensureBannersSchema } = require('./services/banner.service');
 const { ensureBulkCommunicationSchema } = require('./services/bulkCommunication.service');
+const { ensureInstagramReelsSchema } = require('./services/instagram.service');
+const { ensureMarketplaceSchema } = require('./services/marketplace.service');
 const { ensureNavigationSchema } = require('./services/navigation.service');
 const { ensureSettingsSchema } = require('./services/settings.service');
 
@@ -21,10 +24,13 @@ const server = app.listen(PORT, () => {
     try {
       await testConnection();
       await Promise.allSettled([
+        ensureDatabaseSchema(),
         ensurePaymentGatewaySchema(),
         ensureProductSeoSchema(),
         ensureBannersSchema(),
         ensureBulkCommunicationSchema(),
+        ensureInstagramReelsSchema(),
+        ensureMarketplaceSchema(),
         ensureNavigationSchema(),
         ensureSettingsSchema(),
       ]);
