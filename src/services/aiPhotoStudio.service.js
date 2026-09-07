@@ -111,7 +111,7 @@ function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product 
 async function fetchAiImageBuffer(prompt, geminiApiKey = null) {
   const apiKey = (geminiApiKey && String(geminiApiKey).trim()) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  // 1. Try Google Imagen 3 / Gemini API if key is available
+  // 1. Try Google Imagen 3 API if key is available
   if (apiKey) {
     try {
       console.log('🤖 [AI Studio] Generating with Google Gemini / Imagen 3 API...');
@@ -128,7 +128,7 @@ async function fetchAiImageBuffer(prompt, geminiApiKey = null) {
             outputOptions: { mimeType: 'image/jpeg' }
           }
         }),
-        signal: AbortSignal.timeout(60000)
+        signal: AbortSignal.timeout(20000)
       });
 
       if (response.ok) {
@@ -140,33 +140,46 @@ async function fetchAiImageBuffer(prompt, geminiApiKey = null) {
         }
       } else {
         const errText = await response.text();
-        console.warn('⚠️ Gemini Imagen API response not OK, status:', response.status, errText);
+        console.warn('⚠️ Gemini Imagen API response not OK, status:', response.status);
       }
     } catch (geminiErr) {
       console.warn('⚠️ Gemini Imagen API call error:', geminiErr.message);
     }
   }
 
-  // 2. High-res Flux/SDXL Photorealistic Fallback Engine
-  console.log('⚡ [AI Studio] Generating via Flux / SDXL 8K Engine...');
-  const encodedPrompt = encodeURIComponent(prompt);
+  // 2. High-res Photorealistic Engine (Model: Flux -> Turbo fallback)
+  const encodedPrompt = encodeURIComponent(prompt.slice(0, 400));
   const seed = Math.floor(Math.random() * 1000000);
-  const aiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true&model=flux&enhance=true`;
 
-  const fallbackRes = await fetch(aiUrl, {
-    headers: {
-      'User-Agent': 'YogKart-AI-Studio/1.0',
-      'Accept': 'image/*'
-    },
-    signal: AbortSignal.timeout(60000)
-  });
+  const models = ['flux', 'turbo', 'default'];
 
-  if (!fallbackRes.ok) {
-    throw new Error(`AI Image generator failed with HTTP ${fallbackRes.status}`);
+  for (const model of models) {
+    try {
+      console.log(`⚡ [AI Studio] Fetching via Pollinations AI (${model})...`);
+      const modelParam = model !== 'default' ? `&model=${model}` : '';
+      const aiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true${modelParam}`;
+
+      const res = await fetch(aiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/*'
+        },
+        signal: AbortSignal.timeout(25000)
+      });
+
+      if (res.ok) {
+        const arrayBuffer = await res.arrayBuffer();
+        if (arrayBuffer.byteLength > 1000) {
+          console.log(`✅ [AI Studio] Image generated successfully (${model}, ${arrayBuffer.byteLength} bytes)`);
+          return Buffer.from(arrayBuffer);
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ [AI Studio] Model ${model} failed:`, err.message);
+    }
   }
 
-  const arrayBuffer = await fallbackRes.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  throw new Error('AI image generation services are currently busy. Please retry in a few moments.');
 }
 
 /**
@@ -263,10 +276,13 @@ async function generateAmazon7ImageSet({ productName, productId, geminiApiKey = 
     throw new Error('Product Name is required for Amazon 7-Set generation');
   }
 
-  console.log(`📦 [AI Studio] Starting Bulk 7-Image Amazon Suite for: ${productName}...`);
-  const results = [];
+  console.log(`📦 [AI Studio] Starting 7-Image Amazon Suite for: ${productName}...`);
+  
+  // Run templates in 2 small batches (4 + 3) to prevent server / rate limit congestion
+  const batch1 = AMAZON_7_TEMPLATES.slice(0, 4);
+  const batch2 = AMAZON_7_TEMPLATES.slice(4);
 
-  for (const template of AMAZON_7_TEMPLATES) {
+  const processTemplate = async (template) => {
     try {
       console.log(`   👉 [${template.id}/7] Generating ${template.type}...`);
       const res = await generateProductAiPhoto({
@@ -276,7 +292,7 @@ async function generateAmazon7ImageSet({ productName, productId, geminiApiKey = 
         geminiApiKey
       });
 
-      results.push({
+      return {
         templateId: template.id,
         templateType: template.type,
         title: template.title,
@@ -284,23 +300,30 @@ async function generateAmazon7ImageSet({ productName, productId, geminiApiKey = 
         imageUrl: res.imageUrl,
         filename: res.filename,
         prompt: res.prompt
-      });
+      };
     } catch (err) {
       console.error(`❌ Error generating template ${template.type}:`, err.message);
-      results.push({
+      return {
         templateId: template.id,
         templateType: template.type,
         title: template.title,
         error: err.message
-      });
+      };
     }
-  }
+  };
+
+  const results1 = await Promise.all(batch1.map(t => processTemplate(t)));
+  // Small 500ms pause between batches
+  await new Promise(r => setTimeout(r, 500));
+  const results2 = await Promise.all(batch2.map(t => processTemplate(t)));
+
+  const allResults = [...results1, ...results2];
 
   return {
     productName,
     productId,
-    totalGenerated: results.filter(r => r.imageUrl).length,
-    images: results
+    totalGenerated: allResults.filter(r => r.imageUrl).length,
+    images: allResults
   };
 }
 
