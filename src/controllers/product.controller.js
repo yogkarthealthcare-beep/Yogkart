@@ -160,8 +160,16 @@ const getProducts = async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const queryParams = [...params, parseInt(limit), offset];
 
-    let result;
+    let total = 0;
+    let result = { rows: [] };
+
     try {
+      // Count
+      const countResult = await query(
+        `SELECT COUNT(*) FROM products p ${ACTIVE_CATEGORY_JOIN} ${where}`, params
+      );
+      total = parseInt(countResult.rows[0]?.count || 0);
+
       result = await query(
         `SELECT ${PRODUCT_FIELDS} ${searchRank}
          FROM products p
@@ -172,17 +180,23 @@ const getProducts = async (req, res) => {
         queryParams
       );
     } catch (queryErr) {
-      console.warn('getProducts primary query error, applying schema fix and fallback:', queryErr.message);
-      await ensureDatabaseSchema();
-      result = await query(
-        `SELECT ${FALLBACK_PRODUCT_FIELDS}
-         FROM products p
-         ${ACTIVE_CATEGORY_JOIN}
-         ${where}
-         ORDER BY ${orderBy}
-         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
-        queryParams
-      );
+      console.warn('getProducts primary query error, applying schema fix and safe fallback:', queryErr.message);
+      ensureDatabaseSchema().catch(() => {});
+      try {
+        const fallbackCount = await query(`SELECT COUNT(*) FROM products WHERE is_active = TRUE`, []);
+        total = parseInt(fallbackCount.rows[0]?.count || 0);
+        result = await query(
+          `SELECT ${FALLBACK_PRODUCT_FIELDS}
+           FROM products p
+           WHERE p.is_active = TRUE
+           ORDER BY p.id DESC
+           LIMIT $1 OFFSET $2`,
+          [parseInt(limit), offset]
+        );
+      } catch (fatalErr) {
+        console.error('getProducts fallback error:', fatalErr);
+        return error(res, 'Failed to fetch products');
+      }
     }
 
     return paginated(res, result.rows, total, page, limit);
