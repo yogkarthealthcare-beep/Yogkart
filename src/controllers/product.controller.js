@@ -150,12 +150,6 @@ const getProducts = async (req, res) => {
     };
     const orderBy = sortMap[sort] || sortMap['relevance'];
 
-    // Count
-    const countResult = await query(
-      `SELECT COUNT(*) FROM products p ${ACTIVE_CATEGORY_JOIN} ${where}`, params
-    );
-    const total = parseInt(countResult.rows[0].count);
-
     // Paginated results
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const queryParams = [...params, parseInt(limit), offset];
