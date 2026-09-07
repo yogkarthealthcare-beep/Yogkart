@@ -24,10 +24,24 @@ const generatePhoto = async (req, res) => {
     const { productId, productName, templateType, customPrompt, geminiApiKey } = req.body;
 
     let targetName = productName;
-    if (!targetName && productId) {
-      const prodRes = await query('SELECT name FROM products WHERE id = $1', [productId]);
+    let productData = null;
+
+    if (productId) {
+      const prodRes = await query(
+        'SELECT id, name, thumbnail, images, key_benefits, ingredients_list, description FROM products WHERE id = $1',
+        [productId]
+      );
       if (prodRes.rows.length) {
-        targetName = prodRes.rows[0].name;
+        productData = prodRes.rows[0];
+        targetName = productData.name;
+      }
+    } else if (productName) {
+      const prodRes = await query(
+        'SELECT id, name, thumbnail, images, key_benefits, ingredients_list, description FROM products WHERE name ILIKE $1 LIMIT 1',
+        [productName.trim()]
+      );
+      if (prodRes.rows.length) {
+        productData = prodRes.rows[0];
       }
     }
 
@@ -37,6 +51,7 @@ const generatePhoto = async (req, res) => {
 
     const result = await generateProductAiPhoto({
       productName: targetName,
+      productData,
       templateType: templateType || 'Main Product (Hero Shot)',
       customPrompt: customPrompt || '',
       geminiApiKey: geminiApiKey || null
@@ -72,16 +87,24 @@ const generateAmazon7Set = async (req, res) => {
       for (const item of products) {
         let name = item.productName || item.name;
         const pId = item.productId || item.id;
+        let pData = null;
 
-        if (!name && pId) {
-          const dbP = await query('SELECT name FROM products WHERE id = $1', [pId]);
-          if (dbP.rows.length) name = dbP.rows[0].name;
+        if (pId) {
+          const dbP = await query(
+            'SELECT id, name, thumbnail, images, key_benefits, ingredients_list, description FROM products WHERE id = $1',
+            [pId]
+          );
+          if (dbP.rows.length) {
+            pData = dbP.rows[0];
+            name = pData.name;
+          }
         }
 
         if (name) {
           const singleSet = await generateAmazon7ImageSet({
             productName: name,
             productId: pId,
+            productData: pData,
             geminiApiKey,
             customPrompt
           });
@@ -98,10 +121,24 @@ const generateAmazon7Set = async (req, res) => {
     // Single Product Mode
     let targetName = productName;
     let targetId = productId;
-    if (!targetName && targetId) {
-      const prodRes = await query('SELECT name FROM products WHERE id = $1', [targetId]);
+    let productData = null;
+
+    if (targetId) {
+      const prodRes = await query(
+        'SELECT id, name, thumbnail, images, key_benefits, ingredients_list, description FROM products WHERE id = $1',
+        [targetId]
+      );
       if (prodRes.rows.length) {
-        targetName = prodRes.rows[0].name;
+        productData = prodRes.rows[0];
+        targetName = productData.name;
+      }
+    } else if (targetName) {
+      const prodRes = await query(
+        'SELECT id, name, thumbnail, images, key_benefits, ingredients_list, description FROM products WHERE name ILIKE $1 LIMIT 1',
+        [targetName.trim()]
+      );
+      if (prodRes.rows.length) {
+        productData = prodRes.rows[0];
       }
     }
 
@@ -112,6 +149,7 @@ const generateAmazon7Set = async (req, res) => {
     const setResults = await generateAmazon7ImageSet({
       productName: targetName,
       productId: targetId,
+      productData,
       geminiApiKey,
       customPrompt
     });
