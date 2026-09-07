@@ -116,8 +116,11 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
+const { ensureDatabaseSchema } = require('./services/schema.service');
+
 validateEncryptionKey();
 ensureStorageDirs();
+ensureDatabaseSchema().catch(err => console.error('Error ensuring core database schema:', err));
 ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagram_reels schema:', err));
 ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
 ensureCustomerContactsSchema().catch(err => console.error('Error ensuring customer_contacts schema:', err));

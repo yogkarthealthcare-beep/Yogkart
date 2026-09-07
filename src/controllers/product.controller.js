@@ -1,5 +1,6 @@
 const { query } = require('../config/database');
 const { success, notFound, error, paginated } = require('../utils/response');
+const { ensureDatabaseSchema } = require('../services/schema.service');
 
 // Product fields to always select
 const PRODUCT_FIELDS = `
@@ -13,6 +14,14 @@ const PRODUCT_FIELDS = `
   p.seo_title, p.meta_description, p.meta_keywords, p.canonical_url,
   p.short_description, p.seo_description, p.product_highlights,
   p.image_alt_text, p.faq_json, p.schema_json, p.seo_score,
+  p.created_at, p.updated_at
+`;
+
+const FALLBACK_PRODUCT_FIELDS = `
+  p.id, p.name, p.slug, p.category_id AS category, p.brand,
+  p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
+  p.images, p.thumbnail, p.description,
+  p.is_featured, p.is_new, p.is_best_seller, p.tags,
   p.created_at, p.updated_at
 `;
 
@@ -149,47 +158,77 @@ const getProducts = async (req, res) => {
 
     // Paginated results
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    params.push(parseInt(limit));
-    params.push(offset);
+    const queryParams = [...params, parseInt(limit), offset];
 
-    const result = await query(
-      `SELECT ${PRODUCT_FIELDS} ${searchRank}
-       FROM products p
-       ${ACTIVE_CATEGORY_JOIN}
-       ${where}
-       ORDER BY ${orderBy}
-       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
-      params
-    );
+    let result;
+    try {
+      result = await query(
+        `SELECT ${PRODUCT_FIELDS} ${searchRank}
+         FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         ${where}
+         ORDER BY ${orderBy}
+         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+        queryParams
+      );
+    } catch (queryErr) {
+      console.warn('getProducts primary query error, applying schema fix and fallback:', queryErr.message);
+      await ensureDatabaseSchema();
+      result = await query(
+        `SELECT ${FALLBACK_PRODUCT_FIELDS}
+         FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         ${where}
+         ORDER BY ${orderBy}
+         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+        queryParams
+      );
+    }
 
     return paginated(res, result.rows, total, page, limit);
   } catch (err) {
-    console.error('getProducts error:', err);
+    console.error('getProducts fatal error:', err);
     return error(res, 'Failed to fetch products');
   }
 };
 
 const getProduct = async (req, res) => {
   try {
-    const result = await query(
-      `SELECT ${PRODUCT_FIELDS} FROM products p
-       ${ACTIVE_CATEGORY_JOIN}
-       WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
-      [req.params.slug]
-    );
+    let result;
+    try {
+      result = await query(
+        `SELECT ${PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
+        [req.params.slug]
+      );
+    } catch (queryErr) {
+      console.warn('getProduct primary query error, fallback:', queryErr.message);
+      await ensureDatabaseSchema();
+      result = await query(
+        `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
+        [req.params.slug]
+      );
+    }
     if (result.rows.length === 0) return notFound(res, 'Product not found');
 
     const product = result.rows[0];
 
     // Fetch product variants if available
-    const variantsRes = await query(
-      `SELECT id, sku, attribute_name, attribute_value, price, stock_qty, is_active
-       FROM product_variants
-       WHERE product_id = $1 AND is_active = TRUE
-       ORDER BY price ASC`,
-      [product.id]
-    );
-    product.variants = variantsRes.rows;
+    try {
+      const variantsRes = await query(
+        `SELECT id, sku, attribute_name, attribute_value, price, stock_qty, is_active
+         FROM product_variants
+         WHERE product_id = $1 AND is_active = TRUE
+         ORDER BY price ASC`,
+        [product.id]
+      );
+      product.variants = variantsRes.rows;
+    } catch {
+      product.variants = [];
+    }
 
     return success(res, { product });
   } catch (err) {
@@ -210,13 +249,24 @@ const getRelated = async (req, res) => {
     if (product.rows.length === 0) return notFound(res, 'Product not found');
 
     const { id, category_id } = product.rows[0];
-    const result = await query(
-      `SELECT ${PRODUCT_FIELDS} FROM products p
-       ${ACTIVE_CATEGORY_JOIN}
-       WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-       ORDER BY p.rating DESC LIMIT 6`,
-      [category_id, id]
-    );
+    let result;
+    try {
+      result = await query(
+        `SELECT ${PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+         ORDER BY p.rating DESC LIMIT 6`,
+        [category_id, id]
+      );
+    } catch {
+      result = await query(
+        `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+         ORDER BY p.rating DESC LIMIT 6`,
+        [category_id, id]
+      );
+    }
     return success(res, { products: result.rows });
   } catch (err) {
     return error(res, 'Failed to fetch related products');
@@ -245,22 +295,34 @@ const getCategories = async (req, res) => {
 // ── GET /api/products/featured ─────────────────────────
 const getFeatured = async (req, res) => {
   try {
-    // Pehle is_featured = TRUE wale lo
-    let result = await query(
-      `SELECT ${PRODUCT_FIELDS} FROM products p
-       ${ACTIVE_CATEGORY_JOIN}
-       WHERE p.is_featured = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-       ORDER BY p.review_count DESC LIMIT 8`,
-      []
-    );
-
-    // Agar koi featured product nahi hai to top products lo (review_count se)
-    if (result.rows.length === 0) {
+    let result;
+    try {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.is_featured = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+         ORDER BY p.review_count DESC LIMIT 8`,
+        []
+      );
+
+      if (result.rows.length === 0) {
+        result = await query(
+          `SELECT ${PRODUCT_FIELDS} FROM products p
+           ${ACTIVE_CATEGORY_JOIN}
+           WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+           ORDER BY p.review_count DESC, p.created_at DESC
+           LIMIT 8`,
+          []
+        );
+      }
+    } catch (queryErr) {
+      console.warn('Featured query error, applying schema fix and fallback:', queryErr.message);
+      await ensureDatabaseSchema();
+      result = await query(
+        `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
          WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-         ORDER BY p.review_count DESC, p.created_at DESC
+         ORDER BY p.created_at DESC
          LIMIT 8`,
         []
       );
@@ -276,22 +338,34 @@ const getFeatured = async (req, res) => {
 // ── GET /api/products/bestsellers ──────────────────────
 const getBestSellers = async (req, res) => {
   try {
-    // Pehle is_best_seller = TRUE wale lo
-    let result = await query(
-      `SELECT ${PRODUCT_FIELDS} FROM products p
-       ${ACTIVE_CATEGORY_JOIN}
-       WHERE p.is_best_seller = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-       ORDER BY p.review_count DESC LIMIT 8`,
-      []
-    );
-
-    // Agar koi bestseller nahi hai to top rated products lo
-    if (result.rows.length === 0) {
+    let result;
+    try {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         WHERE p.is_best_seller = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+         ORDER BY p.review_count DESC LIMIT 8`,
+        []
+      );
+
+      if (result.rows.length === 0) {
+        result = await query(
+          `SELECT ${PRODUCT_FIELDS} FROM products p
+           ${ACTIVE_CATEGORY_JOIN}
+           WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+           ORDER BY p.review_count DESC, p.rating DESC
+           LIMIT 8`,
+          []
+        );
+      }
+    } catch (queryErr) {
+      console.warn('Bestsellers query error, applying schema fix and fallback:', queryErr.message);
+      await ensureDatabaseSchema();
+      result = await query(
+        `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
          WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-         ORDER BY p.review_count DESC, p.rating DESC
+         ORDER BY p.created_at DESC
          LIMIT 8`,
         []
       );
