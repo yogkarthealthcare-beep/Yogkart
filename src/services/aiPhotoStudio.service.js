@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
 const { STORAGE_ROOT_DIR } = require('../config/storage');
+const { resolveGeminiApiKey } = require('./gemini.service');
 
 const BRAND_LOGO_PATH = path.resolve(__dirname, '../assets/brand_logo.png');
 
@@ -109,7 +110,7 @@ function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product 
  * Fetches AI image buffer using Google Gemini / Imagen 3 API if key provided, with Flux/SDXL fallback
  */
 async function fetchAiImageBuffer(prompt, geminiApiKey = null) {
-  const apiKey = (geminiApiKey && String(geminiApiKey).trim()) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const apiKey = await resolveGeminiApiKey(geminiApiKey);
 
   // 1. Try Google Imagen 3 API if key is available
   if (apiKey) {

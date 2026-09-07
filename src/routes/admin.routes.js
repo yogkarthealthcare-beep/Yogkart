@@ -67,6 +67,8 @@ router.post('/ai-photo/generate',         aiPhotoCtrl.generatePhoto);
 router.post('/ai-photo/amazon-7-set',     aiPhotoCtrl.generateAmazon7Set);
 router.post('/ai-photo/apply',            aiPhotoCtrl.applyPhotoToProduct);
 router.post('/ai-photo/apply-7-set',      aiPhotoCtrl.applyAmazon7SetToProduct);
+router.post('/ai-photo/generate-text',    aiPhotoCtrl.generateText);
+router.post('/ai/generate-text',          aiPhotoCtrl.generateText);
 router.get('/products',                   productsCtrl.getProducts);
 router.get('/products/:id',              productsCtrl.getProduct);
 router.post('/products',                 productsCtrl.createProduct);

@@ -5,6 +5,7 @@ const {
   generateProductAiPhoto,
   generateAmazon7ImageSet
 } = require('../services/aiPhotoStudio.service');
+const { generateGeminiContent } = require('../services/gemini.service');
 
 /**
  * GET /api/admin/ai-photo/templates
@@ -230,10 +231,38 @@ const applyAmazon7SetToProduct = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/admin/ai/generate-text
+ * Generates text response using Google Gemini API (gemini-flash-latest)
+ */
+const generateText = async (req, res) => {
+  try {
+    const { prompt, systemInstruction, model, temperature, apiKey } = req.body;
+
+    if (!prompt || !String(prompt).trim()) {
+      return error(res, 'Prompt is required', 400);
+    }
+
+    const result = await generateGeminiContent({
+      prompt,
+      systemInstruction,
+      model: model || 'gemini-flash-latest',
+      temperature: temperature !== undefined ? Number(temperature) : 0.7,
+      apiKey: apiKey || null
+    });
+
+    return success(res, result, 'Gemini content generated successfully');
+  } catch (err) {
+    console.error('❌ Gemini generateText error:', err);
+    return error(res, err.message || 'Failed to generate content with Gemini AI', 500);
+  }
+};
+
 module.exports = {
   getTemplates,
   generatePhoto,
   generateAmazon7Set,
   applyPhotoToProduct,
-  applyAmazon7SetToProduct
+  applyAmazon7SetToProduct,
+  generateText
 };
