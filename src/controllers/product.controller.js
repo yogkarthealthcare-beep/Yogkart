@@ -195,14 +195,14 @@ const getProducts = async (req, res) => {
         );
       } catch (fatalErr) {
         console.error('getProducts fallback error:', fatalErr);
-        return error(res, 'Failed to fetch products');
+        return error(res, `Failed to fetch products: ${fatalErr.message}`);
       }
     }
 
     return paginated(res, result.rows, total, page, limit);
   } catch (err) {
     console.error('getProducts fatal error:', err);
-    return error(res, 'Failed to fetch products');
+    return error(res, `Failed to fetch products: ${err.message}`);
   }
 };
 

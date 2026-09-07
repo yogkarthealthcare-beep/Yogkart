@@ -8,6 +8,8 @@ const { ensureBulkCommunicationSchema } = require('../src/services/bulkCommunica
 const { ensureInstagramReelsSchema } = require('../src/services/instagram.service');
 const { ensureMarketplaceSchema } = require('../src/services/marketplace.service');
 
+const { ensureDatabaseSchema } = require('../src/services/schema.service');
+
 let dbConnected = false;
 
 // Allowed origins list
@@ -54,6 +56,7 @@ module.exports = async (req, res) => {
       try {
         await testConnection();
         await Promise.allSettled([
+          ensureDatabaseSchema(),
           ensurePaymentGatewaySchema(),
           ensureProductSeoSchema(),
           ensureBannersSchema(),
