@@ -114,22 +114,7 @@ function buildAmazonPhotographyPrompt(productName, templateType = 'Main Product 
   if (normalized.includes('white') || normalized.includes('hero') || normalized.startsWith('1')) {
     if (category.isApparel) {
       const colorText = category.color ? `${category.color}` : 'royal blue';
-      return `Amazon Hero catalog product photography of '${cleanName}' by YogKart.
-PRODUCT PRESENTATION — GHOST MANNEQUIN DISPLAY:
-* 3D invisible ghost mannequin display of the exact ${colorText} sports t-shirt / athletic garment standing upright and centered in the frame.
-* The clothing item is displayed hollow at the collar and sleeves with natural 3D volume, perfect ghost mannequin effect.
-* Crisp round crew neck collar, athletic short sleeves, modern tapered sportswear fit.
-* Clean authentic white 'YogKart' logo and leaf emblem printed sharply on the left chest.
-* Premium quick-dry breathable performance sports fabric texture with realistic micro-mesh perforations and detailed stitching.
-COMPOSITION & BACKGROUND:
-* Placed standing upright in the exact center of the frame occupying 78–85% image height.
-* Pure clean seamless solid white background (#FFFFFF).
-* Soft, realistic, delicate oval contact drop shadow directly on the white floor underneath the garment.
-* Bright professional commercial studio lighting with crisp highlights and even illumination.
-NEGATIVE PROMPT / STRICT EXCLUSIONS:
-* STRICTLY NO human body, NO human skin, NO human model, NO headless human torso, NO human neck, NO arms, NO legs, NO mannequin stand.
-* Only the standalone 3D garment itself on pure white background (#FFFFFF).
-* 1600x1600 square ratio, 8k resolution, photorealistic commercial product catalog standard.${extra}`;
+      return `3D invisible ghost mannequin apparel packshot of a single ${colorText} athletic dry-fit gym t-shirt, front view centered upright, round crew neck collar, short sleeves, crisp white YogKart logo with leaf icon on left chest, isolated on solid pure white background (#FFFFFF), hollow collar with invisible mannequin effect, soft delicate drop shadow directly on floor beneath, clean commercial clothing catalog photography, 8k resolution, photorealistic, pristine standalone garment, NO human model, NO person, NO human body, NO head, NO neck, NO hanger, NO rack.${extra}`;
     }
 
     return `Create a premium Amazon-compliant MAIN PRODUCT IMAGE for '${cleanName}' by YogKart.
