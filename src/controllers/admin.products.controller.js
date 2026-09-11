@@ -70,6 +70,7 @@ const getProducts = async (req, res) => {
          (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
          p.prescription, p.is_active, p.tags, p.images, p.seo_score,
          p.created_at, p.updated_at, c.name AS category_name, p.category_id,
+         COALESCE(p.variation_ids, '{}') AS variation_ids,
          ${BADGE_SELECT_EXPRESSION}
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
@@ -493,6 +494,136 @@ const deleteVariant = async (req, res) => {
   }
 };
 
+const getProductVariations = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const prodResult = await query(
+      `SELECT p.id, p.name, p.thumbnail, p.brand, p.price, p.original_price, p.stock, p.category_id, c.name AS category_name,
+              COALESCE(p.variation_ids, '{}') AS variation_ids
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.id = $1`,
+      [productId]
+    );
+    if (!prodResult.rows.length) return notFound(res, 'Main product not found');
+    const mainProduct = prodResult.rows[0];
+    const variationIds = (mainProduct.variation_ids || []).map(Number).filter(id => Number.isInteger(id) && id > 0);
+
+    let variations = [];
+    if (variationIds.length > 0) {
+      const varsResult = await query(
+        `SELECT p.id, p.name, p.thumbnail, p.brand, p.price, p.original_price, p.stock, p.is_active, p.category_id, c.name AS category_name
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.id = ANY($1::int[])`,
+        [variationIds]
+      );
+      const map = new Map(varsResult.rows.map(r => [Number(r.id), r]));
+      variations = variationIds.map(id => map.get(id)).filter(Boolean);
+    }
+
+    return success(res, { main_product: mainProduct, variations });
+  } catch (err) {
+    console.error('getProductVariations error:', err);
+    return error(res, 'Failed to fetch product variations');
+  }
+};
+
+const saveProductVariations = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const mainId = Number(productId);
+    if (!Number.isInteger(mainId)) return error(res, 'Invalid product ID', 400);
+
+    const rawIds = Array.isArray(req.body.variation_ids) ? req.body.variation_ids : [];
+    const sanitizedIds = [...new Set(
+      rawIds
+        .map(id => Number(id))
+        .filter(id => Number.isInteger(id) && id > 0 && id !== mainId)
+    )];
+
+    if (sanitizedIds.length > 10) {
+      return error(res, 'Maximum 10 variations allowed per product', 400);
+    }
+
+    const mainCheck = await query('SELECT id FROM products WHERE id = $1', [mainId]);
+    if (!mainCheck.rows.length) return notFound(res, 'Main product not found');
+
+    const updateResult = await query(
+      `UPDATE products
+       SET variation_ids = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, variation_ids`,
+      [sanitizedIds, mainId]
+    );
+
+    let variations = [];
+    if (sanitizedIds.length > 0) {
+      const varsResult = await query(
+        `SELECT p.id, p.name, p.thumbnail, p.brand, p.price, p.original_price, p.stock, p.is_active, p.category_id, c.name AS category_name
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.id = ANY($1::int[])`,
+        [sanitizedIds]
+      );
+      const map = new Map(varsResult.rows.map(r => [Number(r.id), r]));
+      variations = sanitizedIds.map(id => map.get(id)).filter(Boolean);
+    }
+
+    return success(res, {
+      product: updateResult.rows[0],
+      variation_ids: sanitizedIds,
+      variations
+    }, 'Product variations saved successfully');
+  } catch (err) {
+    console.error('saveProductVariations error:', err);
+    return error(res, 'Failed to save product variations');
+  }
+};
+
+const searchProductsLookup = async (req, res) => {
+  try {
+    const { search = '', excludeIds = '', limit = 20 } = req.query;
+    const term = String(search).trim();
+    const parsedExcludes = String(excludeIds)
+      .split(',')
+      .map(s => Number(s.trim()))
+      .filter(id => Number.isInteger(id) && id > 0);
+
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (term) {
+      conditions.push(`(p.name ILIKE $${idx} OR p.brand ILIKE $${idx} OR p.id::text ILIKE $${idx} OR p.slug ILIKE $${idx})`);
+      params.push(`%${term}%`);
+      idx++;
+    }
+
+    if (parsedExcludes.length > 0) {
+      conditions.push(`p.id != ALL($${idx}::int[])`);
+      params.push(parsedExcludes);
+      idx++;
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await query(
+      `SELECT p.id, p.name, p.thumbnail, p.brand, p.price, p.original_price, p.stock, p.is_active, c.name AS category_name
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       ${where}
+       ORDER BY p.is_active DESC, p.name ASC
+       LIMIT $${idx}`,
+      [...params, Math.min(Number(limit) || 20, 50)]
+    );
+
+    return success(res, { products: result.rows });
+  } catch (err) {
+    console.error('searchProductsLookup error:', err);
+    return error(res, 'Failed to search products');
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -508,4 +639,7 @@ module.exports = {
   addVariant,
   updateVariant,
   deleteVariant,
+  getProductVariations,
+  saveProductVariations,
+  searchProductsLookup,
 };

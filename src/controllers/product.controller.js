@@ -18,6 +18,7 @@ const PRODUCT_FIELDS = `
   p.seo_title, p.meta_description, p.meta_keywords, p.canonical_url,
   p.short_description, p.seo_description, p.product_highlights,
   p.image_alt_text, p.faq_json, p.schema_json, p.seo_score,
+  COALESCE(p.variation_ids, '{}') AS variation_ids,
   p.created_at, p.updated_at,
   ${BADGE_SELECT_EXPRESSION}
 `;
@@ -251,6 +252,58 @@ const getProduct = async (req, res) => {
       product.variants = [];
     }
 
+    // Fetch linked product variations (from variation_ids or parent reverse lookup)
+    try {
+      let varIds = Array.isArray(product.variation_ids) ? product.variation_ids : [];
+      if (typeof varIds === 'string') {
+        try { varIds = JSON.parse(varIds); } catch { varIds = []; }
+      }
+      const cleanVarIds = varIds.map(Number).filter(id => Number.isInteger(id) && id > 0 && id !== Number(product.id));
+
+      if (cleanVarIds.length > 0) {
+        const varsResult = await query(
+          `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, c.name AS category_name
+           FROM products p
+           LEFT JOIN categories c ON c.id = p.category_id
+           WHERE p.id = ANY($1::int[]) AND p.is_active = TRUE`,
+          [cleanVarIds]
+        );
+        const map = new Map(varsResult.rows.map(r => [Number(r.id), r]));
+        product.linked_variations = cleanVarIds.map(id => map.get(id)).filter(Boolean);
+      } else {
+        // Reverse lookup: check if current product is inside any parent product's variation_ids
+        const parentResult = await query(
+          `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, p.variation_ids, c.name AS category_name
+           FROM products p
+           LEFT JOIN categories c ON c.id = p.category_id
+           WHERE $1 = ANY(p.variation_ids) AND p.is_active = TRUE
+           LIMIT 1`,
+          [Number(product.id)]
+        );
+        if (parentResult.rows.length > 0) {
+          const parent = parentResult.rows[0];
+          const siblingIds = (parent.variation_ids || [])
+            .map(Number)
+            .filter(id => Number.isInteger(id) && id > 0 && id !== Number(product.id));
+          const allRelatedIds = [Number(parent.id), ...siblingIds];
+          const siblingsResult = await query(
+            `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, c.name AS category_name
+             FROM products p
+             LEFT JOIN categories c ON c.id = p.category_id
+             WHERE p.id = ANY($1::int[]) AND p.is_active = TRUE`,
+            [allRelatedIds]
+          );
+          const map = new Map(siblingsResult.rows.map(r => [Number(r.id), r]));
+          product.linked_variations = allRelatedIds.map(id => map.get(id)).filter(Boolean);
+        } else {
+          product.linked_variations = [];
+        }
+      }
+    } catch (varErr) {
+      console.warn('Error fetching linked_variations:', varErr.message);
+      product.linked_variations = [];
+    }
+
     return success(res, { product });
   } catch (err) {
     return error(res, 'Failed to fetch product');
@@ -439,4 +492,94 @@ const getBanners = async (req, res) => {
   return success(res, { banners });
 };
 
-module.exports = { getProducts, getProduct, getRelated, getCategories, getFeatured, getBestSellers, getBanners };
+// ── GET /api/products/:slug/variations ─────────────────
+const getProductVariations = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const isId = /^\d+$/.test(slug);
+    const whereCond = isId ? 'p.id = $1' : 'p.slug = $1';
+    const prodResult = await query(
+      `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, p.variation_ids, c.name AS category_name
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       WHERE ${whereCond} AND p.is_active = TRUE`,
+      [slug]
+    );
+    if (!prodResult.rows.length) return notFound(res, 'Product not found');
+    const mainProduct = prodResult.rows[0];
+
+    let varIds = Array.isArray(mainProduct.variation_ids) ? mainProduct.variation_ids : [];
+    if (typeof varIds === 'string') {
+      try { varIds = JSON.parse(varIds); } catch { varIds = []; }
+    }
+    const cleanVarIds = varIds.map(Number).filter(id => Number.isInteger(id) && id > 0 && id !== Number(mainProduct.id));
+
+    let allVariationProducts = [mainProduct];
+    if (cleanVarIds.length > 0) {
+      const varsResult = await query(
+        `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, c.name AS category_name
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE p.id = ANY($1::int[]) AND p.is_active = TRUE`,
+        [cleanVarIds]
+      );
+      const map = new Map(varsResult.rows.map(r => [Number(r.id), r]));
+      cleanVarIds.forEach(id => {
+        const item = map.get(id);
+        if (item) allVariationProducts.push(item);
+      });
+    } else {
+      // Reverse lookup
+      const parentResult = await query(
+        `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, p.variation_ids, c.name AS category_name
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         WHERE $1 = ANY(p.variation_ids) AND p.is_active = TRUE
+         LIMIT 1`,
+        [Number(mainProduct.id)]
+      );
+      if (parentResult.rows.length > 0) {
+        const parent = parentResult.rows[0];
+        const siblingIds = (parent.variation_ids || [])
+          .map(Number)
+          .filter(id => Number.isInteger(id) && id > 0 && id !== Number(mainProduct.id));
+        const allRelatedIds = [Number(parent.id), ...siblingIds];
+        const siblingsResult = await query(
+          `SELECT p.id, p.name, p.slug, p.thumbnail, p.images, p.brand, p.price, p.original_price, p.discount, p.stock, p.is_active, p.category_id, c.name AS category_name
+           FROM products p
+           LEFT JOIN categories c ON c.id = p.category_id
+           WHERE p.id = ANY($1::int[]) AND p.is_active = TRUE`,
+          [allRelatedIds]
+        );
+        const map = new Map(siblingsResult.rows.map(r => [Number(r.id), r]));
+        allVariationProducts = [parent];
+        siblingIds.forEach(id => {
+          const item = map.get(id);
+          if (item) allVariationProducts.push(item);
+        });
+        if (!allVariationProducts.some(p => p.id === mainProduct.id)) {
+          allVariationProducts.push(mainProduct);
+        }
+      }
+    }
+
+    return success(res, {
+      main_product: mainProduct,
+      variations: allVariationProducts
+    });
+  } catch (err) {
+    console.error('getProductVariations public error:', err);
+    return error(res, 'Failed to fetch product variations');
+  }
+};
+
+module.exports = {
+  getProducts,
+  getProduct,
+  getRelated,
+  getCategories,
+  getFeatured,
+  getBestSellers,
+  getBanners,
+  getProductVariations
+};

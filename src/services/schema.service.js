@@ -33,6 +33,7 @@ ALTER TABLE products
   ADD COLUMN IF NOT EXISTS ingredients_list JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS specifications JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS precautions TEXT,
+  ADD COLUMN IF NOT EXISTS variation_ids INTEGER[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS search_vector TSVECTOR;
 
 -- 2. Ensure Site Settings table

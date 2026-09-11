@@ -62,6 +62,7 @@ router.post('/products/bulk-stock',      productsCtrl.bulkUpdateStock);  // ← 
 router.post('/products/bulk-deactivate', productsCtrl.bulkDeactivateProducts);
 router.post('/products/bulk-delete',     productsCtrl.bulkDeleteProducts);
 router.post('/products/seo/generate',     productsCtrl.generateSeoPreview);
+router.get('/products/search-lookup',     productsCtrl.searchProductsLookup);
 router.get('/ai-photo/templates',         aiPhotoCtrl.getTemplates);
 router.post('/ai-photo/generate',         aiPhotoCtrl.generatePhoto);
 router.post('/ai-photo/amazon-7-set',     aiPhotoCtrl.generateAmazon7Set);
@@ -70,6 +71,8 @@ router.post('/ai-photo/apply-7-set',      aiPhotoCtrl.applyAmazon7SetToProduct);
 router.post('/ai-photo/generate-text',    aiPhotoCtrl.generateText);
 router.post('/ai/generate-text',          aiPhotoCtrl.generateText);
 router.get('/products',                   productsCtrl.getProducts);
+router.get('/products/:productId/variations-detail', productsCtrl.getProductVariations);
+router.put('/products/:productId/variations',        productsCtrl.saveProductVariations);
 router.get('/products/:id',              productsCtrl.getProduct);
 router.post('/products',                 productsCtrl.createProduct);
 router.put('/products/:id',              productsCtrl.updateProduct);
