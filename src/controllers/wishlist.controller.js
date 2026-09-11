@@ -1,11 +1,15 @@
 const { query } = require('../config/database');
 const { success, error } = require('../utils/response');
+const { BESTSELLER_JOIN, BADGE_SELECT_EXPRESSION } = require('../services/badge.service');
 
 const PRODUCT_FIELDS = `
   p.id, p.name, p.slug, p.category_id AS category, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count,
-  p.stock, p.thumbnail, p.images, p.is_featured, p.is_new,
-  p.is_best_seller, p.tags, p.pack_size, p.prescription
+  p.stock, p.thumbnail, p.images, p.is_featured,
+  (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+  (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+  p.tags, p.pack_size, p.prescription,
+  ${BADGE_SELECT_EXPRESSION}
 `;
 
 // ── GET /api/wishlist ──────────────────────────────────
@@ -16,6 +20,7 @@ const getWishlist = async (req, res) => {
        FROM wishlists w
        JOIN products p ON p.id = w.product_id
        LEFT JOIN categories c ON c.id = p.category_id
+       ${BESTSELLER_JOIN}
        WHERE w.user_id = $1
          AND p.is_active = TRUE
          AND (p.category_id IS NULL OR c.is_active = TRUE)

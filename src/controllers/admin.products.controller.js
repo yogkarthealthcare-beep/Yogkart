@@ -6,6 +6,7 @@ const {
   notifySearchIndexing,
   productUrl,
 } = require('../services/productSeo.service');
+const { BESTSELLER_JOIN, BADGE_SELECT_EXPRESSION } = require('../services/badge.service');
 
 const toArray = (value) => {
   if (!value) return [];
@@ -64,11 +65,15 @@ const getProducts = async (req, res) => {
     const result = await query(
       `SELECT
          p.id, p.name, p.slug, p.brand, p.price, p.original_price, p.discount,
-         p.stock, p.thumbnail, p.is_featured, p.is_new, p.is_best_seller,
+         p.stock, p.thumbnail, p.is_featured,
+         (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+         (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
          p.prescription, p.is_active, p.tags, p.images, p.seo_score,
-         p.created_at, p.updated_at, c.name AS category_name, p.category_id
+         p.created_at, p.updated_at, c.name AS category_name, p.category_id,
+         ${BADGE_SELECT_EXPRESSION}
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
+       ${BESTSELLER_JOIN}
        ${where}
        ORDER BY p.created_at DESC
        LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -84,8 +89,13 @@ const getProducts = async (req, res) => {
 const getProduct = async (req, res) => {
   try {
     const result = await query(
-      `SELECT p.*, c.name AS category_name
-       FROM products p LEFT JOIN categories c ON c.id = p.category_id
+      `SELECT p.*, c.name AS category_name,
+         (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+         (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+         ${BADGE_SELECT_EXPRESSION}
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       ${BESTSELLER_JOIN}
        WHERE p.id = $1`,
       [req.params.id]
     );
@@ -102,7 +112,7 @@ const createProduct = async (req, res) => {
       name, brand, price, original_price, category_id, subcategory,
       discount = 0, stock = 0, thumbnail, description, ingredients,
       dosage, side_effects, manufacturer, country_of_origin, pack_size,
-      is_featured = false, is_new = false, is_best_seller = false,
+      is_featured = false,
       prescription = false, is_active = true,
     } = req.body;
     if (!name || !brand || !price || !original_price) {
@@ -145,7 +155,7 @@ const createProduct = async (req, res) => {
         Number(price), Number(original_price), Number(discount), Number(stock),
         images, thumbnail || null, description || null, benefits,
         ingredients || null, dosage || null, side_effects || null,
-        Boolean(is_featured), Boolean(is_new), Boolean(is_best_seller),
+        Boolean(is_featured), false, false,
         seo.product_tags, Boolean(prescription), manufacturer || null,
         country_of_origin || null, pack_size || null, Boolean(is_active),
         seo.seo_title, seo.meta_description, seo.meta_keywords, seo.canonical_url,
@@ -217,8 +227,8 @@ const updateProduct = async (req, res) => {
       dosage: merged.dosage || null,
       side_effects: merged.side_effects || null,
       is_featured: Boolean(merged.is_featured),
-      is_new: Boolean(merged.is_new),
-      is_best_seller: Boolean(merged.is_best_seller),
+      is_new: false,
+      is_best_seller: false,
       tags: seo.product_tags,
       prescription: Boolean(merged.prescription),
       manufacturer: merged.manufacturer || null,

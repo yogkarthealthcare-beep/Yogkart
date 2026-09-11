@@ -1,6 +1,7 @@
 const { query } = require('../config/database');
 const { success, notFound, error, paginated } = require('../utils/response');
 const { ensureDatabaseSchema } = require('../services/schema.service');
+const { BESTSELLER_JOIN, BADGE_SELECT_EXPRESSION } = require('../services/badge.service');
 
 // Product fields to always select
 const PRODUCT_FIELDS = `
@@ -8,21 +9,29 @@ const PRODUCT_FIELDS = `
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description, p.key_benefits,
   p.ingredients, p.dosage, p.side_effects,
-  p.is_featured, p.is_new, p.is_best_seller, p.tags,
+  p.is_featured,
+  (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+  (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+  p.tags,
   p.prescription, p.manufacturer, p.country_of_origin, p.pack_size,
   p.how_to_use, p.ingredients_list, p.specifications, p.precautions,
   p.seo_title, p.meta_description, p.meta_keywords, p.canonical_url,
   p.short_description, p.seo_description, p.product_highlights,
   p.image_alt_text, p.faq_json, p.schema_json, p.seo_score,
-  p.created_at, p.updated_at
+  p.created_at, p.updated_at,
+  ${BADGE_SELECT_EXPRESSION}
 `;
 
 const FALLBACK_PRODUCT_FIELDS = `
   p.id, p.name, p.slug, p.category_id AS category, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description,
-  p.is_featured, p.is_new, p.is_best_seller, p.tags,
-  p.created_at, p.updated_at
+  p.is_featured,
+  (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+  (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+  p.tags,
+  p.created_at, p.updated_at,
+  ${BADGE_SELECT_EXPRESSION}
 `;
 
 const ACTIVE_CATEGORY_JOIN = 'LEFT JOIN categories c ON c.id = p.category_id';
@@ -116,11 +125,11 @@ const getProducts = async (req, res) => {
     }
 
     if (isNew === 'true') {
-      conditions.push('p.is_new = TRUE');
+      conditions.push("p.created_at >= (NOW() - INTERVAL '6 months')");
     }
 
     if (bestseller === 'true') {
-      conditions.push('p.is_best_seller = TRUE');
+      conditions.push("cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months')");
     }
 
     // Full text search
@@ -160,7 +169,7 @@ const getProducts = async (req, res) => {
     try {
       // Count
       const countResult = await query(
-        `SELECT COUNT(*) FROM products p ${ACTIVE_CATEGORY_JOIN} ${where}`, params
+        `SELECT COUNT(*) FROM products p ${ACTIVE_CATEGORY_JOIN} ${BESTSELLER_JOIN} ${where}`, params
       );
       total = parseInt(countResult.rows[0]?.count || 0);
 
@@ -168,6 +177,7 @@ const getProducts = async (req, res) => {
         `SELECT ${PRODUCT_FIELDS} ${searchRank}
          FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          ${where}
          ORDER BY ${orderBy}
          LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
@@ -182,6 +192,7 @@ const getProducts = async (req, res) => {
         result = await query(
           `SELECT ${FALLBACK_PRODUCT_FIELDS}
            FROM products p
+           ${BESTSELLER_JOIN}
            WHERE p.is_active = TRUE
            ORDER BY p.id DESC
            LIMIT $1 OFFSET $2`,
@@ -207,6 +218,7 @@ const getProduct = async (req, res) => {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
         [req.params.slug]
       );
@@ -216,6 +228,7 @@ const getProduct = async (req, res) => {
       result = await query(
         `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.slug = $1 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}`,
         [req.params.slug]
       );
@@ -262,6 +275,7 @@ const getRelated = async (req, res) => {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.rating DESC LIMIT 6`,
         [category_id, id]
@@ -270,6 +284,7 @@ const getRelated = async (req, res) => {
       result = await query(
         `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.category_id = $1 AND p.id != $2 AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.rating DESC LIMIT 6`,
         [category_id, id]
@@ -308,6 +323,7 @@ const getFeatured = async (req, res) => {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.is_featured = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.review_count DESC LIMIT 8`,
         []
@@ -317,6 +333,7 @@ const getFeatured = async (req, res) => {
         result = await query(
           `SELECT ${PRODUCT_FIELDS} FROM products p
            ${ACTIVE_CATEGORY_JOIN}
+           ${BESTSELLER_JOIN}
            WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
            ORDER BY p.review_count DESC, p.created_at DESC
            LIMIT 8`,
@@ -329,6 +346,7 @@ const getFeatured = async (req, res) => {
       result = await query(
         `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.created_at DESC
          LIMIT 8`,
@@ -351,8 +369,9 @@ const getBestSellers = async (req, res) => {
       result = await query(
         `SELECT ${PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
-         WHERE p.is_best_seller = TRUE AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
-         ORDER BY p.review_count DESC LIMIT 8`,
+         ${BESTSELLER_JOIN}
+         WHERE cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') AND p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
+         ORDER BY cb.total_orders DESC, p.review_count DESC LIMIT 8`,
         []
       );
 
@@ -360,6 +379,7 @@ const getBestSellers = async (req, res) => {
         result = await query(
           `SELECT ${PRODUCT_FIELDS} FROM products p
            ${ACTIVE_CATEGORY_JOIN}
+           ${BESTSELLER_JOIN}
            WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
            ORDER BY p.review_count DESC, p.rating DESC
            LIMIT 8`,
@@ -372,6 +392,7 @@ const getBestSellers = async (req, res) => {
       result = await query(
         `SELECT ${FALLBACK_PRODUCT_FIELDS} FROM products p
          ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
          WHERE p.is_active = TRUE AND ${ACTIVE_CATEGORY_CONDITION} AND ${PUBLIC_CATEGORY_CONDITION}
          ORDER BY p.created_at DESC
          LIMIT 8`,
