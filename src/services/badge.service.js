@@ -2,12 +2,13 @@
  * Automatic Badge Calculation Service
  * 
  * Rules & Priority:
- * 1. NEW: Product added within the last 6 months (created_at >= NOW() - INTERVAL '6 months')
- * 2. BESTSELLER: Product is NOT NEW, has Total Orders > 10, and has the HIGHEST orders in its category
- * 3. BEST DISCOUNT: Product is NOT NEW, NOT BESTSELLER, and Discount > 20%
- * 4. NULL (NO BADGE): None of the above
+ * 1. BEST SELLER (Priority Score 100): Product has total orders > 0 and the highest orders in its category.
+ * 2. NEW (Priority Score 80): Product created within the last 6 months (created_at >= NOW() - INTERVAL '6 months').
+ * 3. DISCOUNT (Priority Score 60): Product has actual discount > 20%.
+ * 4. NULL (NO BADGE, Score 0): None of the above.
  * 
  * Exactly ONE badge per product.
+ * BEST SELLER > NEW > DISCOUNT
  */
 
 const BESTSELLER_JOIN = `
@@ -27,14 +28,13 @@ const BESTSELLER_JOIN = `
         COALESCE(po.total_orders, 0) AS total_orders,
         ROW_NUMBER() OVER (
           PARTITION BY p.category_id 
-          ORDER BY COALESCE(po.total_orders, 0) DESC, p.id ASC
+          ORDER BY COALESCE(po.total_orders, 0) DESC, p.review_count DESC, p.id ASC
         ) AS rank
       FROM products p
       JOIN product_orders po ON po.product_id = p.id
       WHERE p.is_active = TRUE
         AND p.category_id IS NOT NULL
-        AND p.created_at < (NOW() - INTERVAL '6 months')
-        AND po.total_orders > 10
+        AND po.total_orders > 0
     )
     SELECT product_id, category_id, total_orders
     FROM ranked
@@ -44,8 +44,8 @@ const BESTSELLER_JOIN = `
 
 const BADGE_SELECT_EXPRESSION = `
   CASE
-    WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN 'NEW'
     WHEN cb.product_id IS NOT NULL THEN 'BESTSELLER'
+    WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN 'NEW'
     WHEN (
       COALESCE(p.discount, 0) > 20 
       OR (
@@ -59,31 +59,42 @@ const BADGE_SELECT_EXPRESSION = `
 
 /**
  * Pure JS fallback/normalization helper
+ * Priority: BEST SELLER (100) > NEW (80) > DISCOUNT (60) > NONE (0)
  */
 function computeProductBadge(product, bestsellerProductIds = new Set()) {
-  const createdAt = product.created_at ? new Date(product.created_at) : null;
+  if (!product) return null;
+
+  // Condition 1: BESTSELLER Eligibility
+  const isBestseller = Boolean(
+    (bestsellerProductIds && bestsellerProductIds.has(product.id)) ||
+    product.is_best_seller ||
+    product.isBestSeller ||
+    product.is_best_seller_calculated
+  );
+
+  // Condition 2: NEW Eligibility (Created within last 6 months)
+  const createdAt = product.created_at || product.createdAt ? new Date(product.created_at || product.createdAt) : null;
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const isNew = Boolean(createdAt && !isNaN(createdAt.getTime()) && createdAt >= sixMonthsAgo);
 
-  // Priority 1: NEW (Added within last 6 months)
-  if (createdAt && !isNaN(createdAt.getTime()) && createdAt >= sixMonthsAgo) {
-    return 'NEW';
-  }
-
-  // Priority 2: BESTSELLER
-  if (bestsellerProductIds.has(product.id) || product.is_best_seller_calculated) {
-    return 'BESTSELLER';
-  }
-
-  // Priority 3: BEST DISCOUNT (> 20%)
+  // Condition 3: DISCOUNT Eligibility (> 20%)
   const originalPrice = parseFloat(product.original_price || product.originalPrice || 0);
   const price = parseFloat(product.price || 0);
   const discount = Number(product.discount || 0);
   const calculatedDiscount = originalPrice > price 
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : 0;
+  const isDiscount = discount > 20 || calculatedDiscount > 20;
 
-  if (discount > 20 || calculatedDiscount > 20) {
+  // Apply Priority Order: BEST SELLER > NEW > DISCOUNT
+  if (isBestseller) {
+    return 'BESTSELLER';
+  }
+  if (isNew) {
+    return 'NEW';
+  }
+  if (isDiscount) {
     return 'BEST DISCOUNT';
   }
 
@@ -95,3 +106,4 @@ module.exports = {
   BADGE_SELECT_EXPRESSION,
   computeProductBadge,
 };
+

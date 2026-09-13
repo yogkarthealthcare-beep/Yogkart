@@ -67,7 +67,7 @@ const getProducts = async (req, res) => {
          p.id, p.name, p.slug, p.brand, p.price, p.original_price, p.discount,
          p.stock, p.thumbnail, p.is_featured,
          (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
-         (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+         (CASE WHEN cb.product_id IS NOT NULL THEN TRUE ELSE FALSE END) AS is_best_seller,
          p.prescription, p.is_active, p.tags, p.images, p.seo_score,
          p.created_at, p.updated_at, c.name AS category_name, p.category_id,
          COALESCE(p.variation_ids, '{}') AS variation_ids,
@@ -92,7 +92,7 @@ const getProduct = async (req, res) => {
     const result = await query(
       `SELECT p.*, c.name AS category_name,
          (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
-         (CASE WHEN cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_best_seller,
+         (CASE WHEN cb.product_id IS NOT NULL THEN TRUE ELSE FALSE END) AS is_best_seller,
          ${BADGE_SELECT_EXPRESSION}
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
