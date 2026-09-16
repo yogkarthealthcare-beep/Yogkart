@@ -44,6 +44,22 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 3. Ensure Product Reviews table
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  user_id INTEGER,
+  user_name VARCHAR(100) NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  title VARCHAR(255),
+  comment TEXT NOT NULL,
+  is_verified_buyer BOOLEAN DEFAULT TRUE,
+  is_approved BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_product_reviews_product_id ON product_reviews(product_id);
+
 -- Default settings seed
 INSERT INTO site_settings (setting_key, setting_value, description)
 VALUES (

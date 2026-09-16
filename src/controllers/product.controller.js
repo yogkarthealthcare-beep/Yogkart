@@ -772,6 +772,100 @@ const getProductVariations = async (req, res) => {
   }
 };
 
+// ── GET /api/products/:slug/reviews ────────────────────────
+const getProductReviews = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    await ensureDatabaseSchema();
+
+    let productId = parseInt(slug, 10);
+    if (isNaN(productId)) {
+      const prodRes = await query('SELECT id, rating, review_count FROM products WHERE slug = $1 LIMIT 1', [slug]);
+      if (!prodRes.rows.length) return notFound(res, 'Product not found');
+      productId = prodRes.rows[0].id;
+    }
+
+    const reviewsRes = await query(
+      `SELECT id, product_id, user_id, user_name, rating, title, comment, is_verified_buyer, created_at
+       FROM product_reviews
+       WHERE product_id = $1 AND is_approved = TRUE
+       ORDER BY created_at DESC`,
+      [productId]
+    );
+
+    const reviews = reviewsRes.rows;
+    const totalReviews = reviews.length;
+    const avgRating = totalReviews > 0
+      ? (reviews.reduce((acc, r) => acc + Number(r.rating || 0), 0) / totalReviews)
+      : 0;
+
+    const distribution = [5, 4, 3, 2, 1].map(stars => {
+      const count = reviews.filter(r => Number(r.rating) === stars).length;
+      const percentage = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
+      return { stars, count, percentage };
+    });
+
+    return success(res, {
+      productId,
+      averageRating: parseFloat(avgRating.toFixed(1)),
+      totalReviews,
+      distribution,
+      reviews
+    });
+  } catch (err) {
+    console.error('getProductReviews error:', err);
+    return error(res, 'Failed to fetch product reviews');
+  }
+};
+
+// ── POST /api/products/:slug/reviews ───────────────────────
+const addProductReview = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { userName, rating, comment, title } = req.body;
+
+    if (!userName || !rating || !comment) {
+      return error(res, 'User name, rating (1-5), and review comment are required', 400);
+    }
+
+    const numRating = Math.max(1, Math.min(5, parseInt(rating, 10)));
+    await ensureDatabaseSchema();
+
+    let productId = parseInt(slug, 10);
+    if (isNaN(productId)) {
+      const prodRes = await query('SELECT id FROM products WHERE slug = $1 LIMIT 1', [slug]);
+      if (!prodRes.rows.length) return notFound(res, 'Product not found');
+      productId = prodRes.rows[0].id;
+    }
+
+    const insertRes = await query(
+      `INSERT INTO product_reviews (product_id, user_name, rating, title, comment, is_verified_buyer, is_approved)
+       VALUES ($1, $2, $3, $4, $5, TRUE, TRUE)
+       RETURNING *`,
+      [productId, String(userName).trim(), numRating, title ? String(title).trim() : null, String(comment).trim()]
+    );
+
+    // Update product rating and review count
+    const statsRes = await query(
+      `SELECT COUNT(*)::int AS total, AVG(rating)::numeric(3,1) AS avg_rating
+       FROM product_reviews
+       WHERE product_id = $1 AND is_approved = TRUE`,
+      [productId]
+    );
+    if (statsRes.rows.length > 0) {
+      await query(
+        `UPDATE products SET rating = $1, review_count = $2 WHERE id = $3`,
+        [statsRes.rows[0].avg_rating || numRating, statsRes.rows[0].total || 1, productId]
+      );
+    }
+
+    return success(res, { review: insertRes.rows[0] }, 'Review submitted successfully');
+  } catch (err) {
+    console.error('addProductReview error:', err);
+    return error(res, 'Failed to submit product review');
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -781,5 +875,7 @@ module.exports = {
   getBestSellers,
   getHomepageProducts,
   getBanners,
-  getProductVariations
+  getProductVariations,
+  getProductReviews,
+  addProductReview
 };

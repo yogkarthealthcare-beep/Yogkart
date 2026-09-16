@@ -2,13 +2,13 @@
  * Automatic Badge Calculation Service
  * 
  * Rules & Priority:
- * 1. BEST SELLER (Priority Score 100): Product has total orders > 0 and the highest orders in its category.
- * 2. NEW (Priority Score 80): Product created within the last 6 months (created_at >= NOW() - INTERVAL '6 months').
+ * 1. NEW (Priority Score 100): Product created within the last 6 months (created_at >= NOW() - INTERVAL '6 months').
+ * 2. BEST SELLER (Priority Score 80): Product has total orders > 0 and the highest orders in its category.
  * 3. DISCOUNT (Priority Score 60): Product has actual discount > 20%.
  * 4. NULL (NO BADGE, Score 0): None of the above.
  * 
  * Exactly ONE badge per product.
- * BEST SELLER > NEW > DISCOUNT
+ * NEW > BEST SELLER > DISCOUNT
  */
 
 const BESTSELLER_JOIN = `
@@ -44,8 +44,8 @@ const BESTSELLER_JOIN = `
 
 const BADGE_SELECT_EXPRESSION = `
   CASE
-    WHEN cb.product_id IS NOT NULL THEN 'BESTSELLER'
     WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN 'NEW'
+    WHEN cb.product_id IS NOT NULL THEN 'BESTSELLER'
     WHEN (
       COALESCE(p.discount, 0) > 20 
       OR (
@@ -59,24 +59,24 @@ const BADGE_SELECT_EXPRESSION = `
 
 /**
  * Pure JS fallback/normalization helper
- * Priority: BEST SELLER (100) > NEW (80) > DISCOUNT (60) > NONE (0)
+ * Priority: NEW (100) > BEST SELLER (80) > DISCOUNT (60) > NONE (0)
  */
 function computeProductBadge(product, bestsellerProductIds = new Set()) {
   if (!product) return null;
 
-  // Condition 1: BESTSELLER Eligibility
+  // Condition 1: NEW Eligibility (Created within last 6 months)
+  const createdAt = product.created_at || product.createdAt ? new Date(product.created_at || product.createdAt) : null;
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const isNew = Boolean(createdAt && !isNaN(createdAt.getTime()) && createdAt >= sixMonthsAgo);
+
+  // Condition 2: BESTSELLER Eligibility
   const isBestseller = Boolean(
     (bestsellerProductIds && bestsellerProductIds.has(product.id)) ||
     product.is_best_seller ||
     product.isBestSeller ||
     product.is_best_seller_calculated
   );
-
-  // Condition 2: NEW Eligibility (Created within last 6 months)
-  const createdAt = product.created_at || product.createdAt ? new Date(product.created_at || product.createdAt) : null;
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const isNew = Boolean(createdAt && !isNaN(createdAt.getTime()) && createdAt >= sixMonthsAgo);
 
   // Condition 3: DISCOUNT Eligibility (> 20%)
   const originalPrice = parseFloat(product.original_price || product.originalPrice || 0);
@@ -87,12 +87,12 @@ function computeProductBadge(product, bestsellerProductIds = new Set()) {
     : 0;
   const isDiscount = discount > 20 || calculatedDiscount > 20;
 
-  // Apply Priority Order: BEST SELLER > NEW > DISCOUNT
-  if (isBestseller) {
-    return 'BESTSELLER';
-  }
+  // Apply Priority Order: NEW > BEST SELLER > DISCOUNT
   if (isNew) {
     return 'NEW';
+  }
+  if (isBestseller) {
+    return 'BESTSELLER';
   }
   if (isDiscount) {
     return 'BEST DISCOUNT';
