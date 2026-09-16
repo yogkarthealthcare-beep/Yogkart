@@ -167,6 +167,8 @@ app.get('/robots.txt', seoController.robots);
 app.get('/llms.txt', seoController.llmsTxt);
 app.get('/llms-full.txt', seoController.llmsTxt);
 app.get('/share/products/:slug', socialShareController.getSocialPreview);
+app.get('/p/:slug', socialShareController.getSocialPreview);
+app.get('/products/:slug', socialShareController.getSocialPreview);
 
 const deployRoutes        = require('./routes/deploy.routes');
 
