@@ -45,6 +45,7 @@ const analyticsRoutes       = require('./routes/analytics.routes');
 const uploadRoutes          = require('./routes/upload.routes');
 const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
 const navigationRoutes      = require('./routes/navigation.routes');
+const settingsRoutes        = require('./routes/settings.routes');
 const newsletterRoutes      = require('./routes/newsletter.routes');
 const adminNewsletterRoutes = require('./routes/admin.newsletter.routes');
 const { ensureNewsletterSchema } = require('./services/newsletter.service');
