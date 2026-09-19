@@ -210,16 +210,64 @@ const previewExcelBuffer = async (buffer) => {
 };
 
 /**
- * Batch imports parsed records into marketing_emails table
+ * Batch imports parsed records into marketing_emails table with full deduplication & summary metrics
  */
 const importMarketingEmailRecords = async (records = []) => {
   if (!Array.isArray(records) || records.length === 0) {
-    return { importedCount: 0, duplicateCount: 0, failedCount: 0, total: 0 };
+    return {
+      totalRows: 0,
+      importedCount: 0,
+      duplicateInFile: 0,
+      duplicateInDb: 0,
+      duplicateCount: 0,
+      invalidCount: 0,
+      failedCount: 0,
+    };
+  }
+
+  const totalRows = records.length;
+  const seenEmails = new Set();
+  const uniqueValidRecords = [];
+  let invalidCount = 0;
+  let duplicateInFile = 0;
+
+  // 1. In-memory validation & in-file deduplication
+  for (const item of records) {
+    const email = String(item.email || '').trim().toLowerCase();
+    if (!email || !isValidEmail(email)) {
+      invalidCount++;
+      continue;
+    }
+
+    if (seenEmails.has(email)) {
+      duplicateInFile++;
+      continue;
+    }
+
+    seenEmails.add(email);
+    uniqueValidRecords.push({
+      name: String(item.name || '').trim(),
+      email,
+      contact: String(item.contact || '').trim(),
+      address: String(item.address || '').trim(),
+      country: String(item.country || '').trim(),
+    });
+  }
+
+  if (uniqueValidRecords.length === 0) {
+    return {
+      totalRows,
+      importedCount: 0,
+      duplicateInFile,
+      duplicateInDb: 0,
+      duplicateCount: duplicateInFile,
+      invalidCount,
+      failedCount: 0,
+    };
   }
 
   const client = await getClient();
   let importedCount = 0;
-  let duplicateCount = 0;
   let failedCount = 0;
 
   try {
@@ -227,26 +275,15 @@ const importMarketingEmailRecords = async (records = []) => {
 
     // Batch insertion in chunks of 500
     const chunkSize = 500;
-    for (let i = 0; i < records.length; i += chunkSize) {
-      const chunk = records.slice(i, i + chunkSize);
+    for (let i = 0; i < uniqueValidRecords.length; i += chunkSize) {
+      const chunk = uniqueValidRecords.slice(i, i + chunkSize);
       const values = [];
       const placeholders = [];
       let pIdx = 1;
 
       for (const item of chunk) {
-        const email = String(item.email || '').trim().toLowerCase();
-        if (!email || !isValidEmail(email)) {
-          failedCount++;
-          continue;
-        }
-
-        const name = String(item.name || '').trim();
-        const contact = String(item.contact || '').trim();
-        const address = String(item.address || '').trim();
-        const country = String(item.country || '').trim();
-
         placeholders.push(`($${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, 'Pending', NOW(), NOW())`);
-        values.push(name, email, contact, address, country);
+        values.push(item.name, item.email, item.contact, item.address, item.country);
       }
 
       if (placeholders.length > 0) {
@@ -258,18 +295,23 @@ const importMarketingEmailRecords = async (records = []) => {
         `;
 
         const res = await client.query(insertSql, values);
-        const insertedNow = res.rowCount || 0;
-        importedCount += insertedNow;
-        duplicateCount += (placeholders.length - insertedNow);
+        importedCount += (res.rowCount || 0);
       }
     }
 
     await client.query('COMMIT');
+
+    const duplicateInDb = uniqueValidRecords.length - importedCount;
+    const duplicateCount = duplicateInFile + duplicateInDb;
+
     return {
+      totalRows,
       importedCount,
+      duplicateInFile,
+      duplicateInDb,
       duplicateCount,
+      invalidCount,
       failedCount,
-      total: records.length,
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -282,9 +324,9 @@ const importMarketingEmailRecords = async (records = []) => {
 /**
  * Fetches paginated marketing emails with filters
  */
-const getMarketingEmails = async ({ page = 1, limit = 20, search = '', status = '', country = '', sortBy = 'created_at', sortOrder = 'DESC' }) => {
+const getMarketingEmails = async ({ page = 1, limit = 25, search = '', status = '', country = '', sortBy = 'created_at', sortOrder = 'DESC' }) => {
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const l = Math.min(500, Math.max(1, parseInt(limit, 10) || 20));
+  const l = Math.min(500, Math.max(1, parseInt(limit, 10) || 25));
   const offset = (p - 1) * l;
 
   const conditions = [];

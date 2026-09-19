@@ -1,6 +1,6 @@
 const xlsx = require('xlsx');
 const service = require('../services/marketingEmails.service');
-const { success, error, notFound } = require('../utils/response');
+const { success, error, notFound, paginated } = require('../utils/response');
 
 /**
  * Previews uploaded Excel/CSV file without saving to DB
@@ -30,7 +30,11 @@ const importRecords = async (req, res) => {
     }
 
     const result = await service.importMarketingEmailRecords(records);
-    return success(res, result, `Successfully imported ${result.importedCount} new email records`);
+    let msg = `Successfully imported ${result.importedCount} unique email records into the database.`;
+    if (result.importedCount === 0 && result.totalRows > 0) {
+      msg = 'All email records already exist. No new records were imported.';
+    }
+    return success(res, result, msg);
   } catch (err) {
     console.error('Error importing marketing email records:', err);
     return error(res, err.message || 'Failed to import records', 500);
@@ -42,7 +46,7 @@ const importRecords = async (req, res) => {
  */
 const getMarketingEmails = async (req, res) => {
   try {
-    const { page, limit, search, status, country, sortBy, sortOrder } = req.query;
+    const { page = 1, limit = 25, search, status, country, sortBy, sortOrder } = req.query;
     const data = await service.getMarketingEmails({
       page,
       limit,
@@ -52,7 +56,7 @@ const getMarketingEmails = async (req, res) => {
       sortBy,
       sortOrder,
     });
-    return success(res, data);
+    return paginated(res, data.emails, data.total, data.page, data.limit);
   } catch (err) {
     console.error('Error getting marketing emails:', err);
     return error(res, 'Failed to fetch marketing email records', 500);
