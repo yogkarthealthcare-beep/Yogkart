@@ -3,6 +3,7 @@ const router = express.Router();
 const ctrl = require('../controllers/product.controller');
 
 // Public routes
+router.get('/',                 ctrl.getProducts);
 router.get('/banners',          ctrl.getBanners);
 router.get('/homepage',         ctrl.getHomepageProducts);
 router.get('/featured',         ctrl.getFeatured);
