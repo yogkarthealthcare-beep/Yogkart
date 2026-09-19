@@ -11,6 +11,7 @@ const { ensureNavigationSchema } = require('./services/navigation.service');
 const { ensureSettingsSchema } = require('./services/settings.service');
 const { ensureCustomerContactsSchema } = require('./services/customerContacts.service');
 const { ensureNewsletterSchema } = require('./services/newsletter.service');
+const { ensureMarketingEmailsSchema } = require('./services/marketingEmails.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -37,6 +38,7 @@ const server = app.listen(PORT, () => {
         ensureSettingsSchema(),
         ensureCustomerContactsSchema(),
         ensureNewsletterSchema(),
+        ensureMarketingEmailsSchema(),
       ]);
       console.log('✅ Database connection and schemas initialized successfully');
     } catch (dbErr) {
