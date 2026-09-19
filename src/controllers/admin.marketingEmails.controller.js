@@ -209,6 +209,22 @@ const resetStatus = async (req, res) => {
   }
 };
 
+/**
+ * Removes duplicate email entries from database
+ */
+const removeDuplicates = async (req, res) => {
+  try {
+    const count = await service.removeDuplicateEmails();
+    const msg = count > 0
+      ? `Successfully removed ${count} duplicate email record(s).`
+      : 'No duplicate emails found. All records are unique.';
+    return success(res, { count }, msg);
+  } catch (err) {
+    console.error('Error removing duplicate marketing emails:', err);
+    return error(res, 'Failed to remove duplicate emails', 500);
+  }
+};
+
 module.exports = {
   previewExcel,
   importRecords,
@@ -220,4 +236,5 @@ module.exports = {
   deleteRecord,
   bulkDelete,
   resetStatus,
+  removeDuplicates,
 };

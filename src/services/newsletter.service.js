@@ -183,6 +183,33 @@ const getAllForExport = async () => {
   return res.rows;
 };
 
+/**
+ * Admin: Remove duplicate subscribers by email
+ */
+const removeDuplicateSubscribers = async () => {
+  const querySql = `
+    WITH duplicates AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY LOWER(TRIM(email))
+               ORDER BY 
+                 CASE WHEN status = 'subscribed' THEN 1 ELSE 2 END ASC,
+                 created_at DESC,
+                 id DESC
+             ) as rnum
+      FROM newsletter_subscribers
+      WHERE email IS NOT NULL AND email != ''
+    )
+    DELETE FROM newsletter_subscribers
+    WHERE id IN (
+      SELECT id FROM duplicates WHERE rnum > 1
+    )
+    RETURNING id;
+  `;
+  const res = await query(querySql);
+  return res.rowCount || 0;
+};
+
 module.exports = {
   ensureNewsletterSchema,
   subscribe,
@@ -191,5 +218,6 @@ module.exports = {
   deleteSubscriber,
   bulkDelete,
   updateStatus,
-  getAllForExport
+  getAllForExport,
+  removeDuplicateSubscribers,
 };

@@ -211,6 +211,20 @@ const clearAll = async (req, res) => {
   }
 };
 
+/**
+ * Remove duplicate contacts by email
+ * POST /api/admin/customer-contacts/remove-duplicates
+ */
+const removeDuplicates = async (req, res) => {
+  try {
+    const count = await customerContactsService.removeDuplicateContacts();
+    return success(res, count > 0 ? `Successfully removed ${count} duplicate contact(s)` : 'No duplicate contacts found', { count });
+  } catch (err) {
+    console.error('❌ Error removing duplicate contacts:', err);
+    return error(res, 'Failed to remove duplicate contacts', 500);
+  }
+};
+
 module.exports = {
   importExcel,
   previewExcel,
@@ -219,5 +233,6 @@ module.exports = {
   getStats,
   deleteContact,
   bulkDelete,
-  clearAll
+  clearAll,
+  removeDuplicates,
 };

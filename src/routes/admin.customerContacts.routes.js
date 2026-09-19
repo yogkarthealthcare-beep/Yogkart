@@ -31,6 +31,7 @@ router.post('/preview', upload.single('file'), customerContactsCtrl.previewExcel
 router.post('/import', upload.single('file'), customerContactsCtrl.importExcel);
 router.post('/batch', customerContactsCtrl.batchInsert);
 router.post('/delete-bulk', customerContactsCtrl.bulkDelete);
+router.post('/remove-duplicates', customerContactsCtrl.removeDuplicates);
 router.delete('/clear-all', customerContactsCtrl.clearAll);
 
 // General collection & ID routes

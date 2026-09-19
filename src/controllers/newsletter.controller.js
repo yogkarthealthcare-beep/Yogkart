@@ -155,6 +155,23 @@ const exportAll = async (req, res) => {
   }
 };
 
+/**
+ * Admin: POST /api/admin/newsletter/remove-duplicates
+ */
+const removeDuplicates = async (req, res) => {
+  try {
+    const count = await newsletterService.removeDuplicateSubscribers();
+    return res.json({
+      success: true,
+      message: count > 0 ? `Successfully removed ${count} duplicate subscriber(s)` : 'No duplicate subscribers found',
+      data: { count }
+    });
+  } catch (err) {
+    console.error('❌ Error removing duplicate subscribers:', err);
+    return res.status(500).json({ success: false, message: 'Failed to remove duplicate subscribers.' });
+  }
+};
+
 module.exports = {
   subscribe,
   getSubscribers,
@@ -162,5 +179,6 @@ module.exports = {
   deleteSubscriber,
   bulkDelete,
   updateStatus,
-  exportAll
+  exportAll,
+  removeDuplicates,
 };

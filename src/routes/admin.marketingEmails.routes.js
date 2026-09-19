@@ -35,6 +35,7 @@ router.post('/import', ctrl.importRecords);
 router.post('/send', ctrl.sendBulk);
 router.post('/delete-bulk', ctrl.bulkDelete);
 router.post('/reset-status', ctrl.resetStatus);
+router.post('/remove-duplicates', ctrl.removeDuplicates);
 
 // Collection & ID routes
 router.get('/', ctrl.getMarketingEmails);

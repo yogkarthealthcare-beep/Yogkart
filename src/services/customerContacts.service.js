@@ -488,6 +488,30 @@ const clearAllContacts = async () => {
   return true;
 };
 
+/**
+ * Removes duplicate contacts by email, keeping the latest one
+ */
+const removeDuplicateContacts = async () => {
+  const querySql = `
+    WITH duplicates AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY LOWER(TRIM(email))
+               ORDER BY created_at DESC, id DESC
+             ) as rnum
+      FROM customer_contacts
+      WHERE email IS NOT NULL AND email != ''
+    )
+    DELETE FROM customer_contacts
+    WHERE id IN (
+      SELECT id FROM duplicates WHERE rnum > 1
+    )
+    RETURNING id;
+  `;
+  const res = await query(querySql);
+  return res.rowCount || 0;
+};
+
 module.exports = {
   ensureCustomerContactsSchema,
   parseExcelBuffer,
@@ -497,5 +521,6 @@ module.exports = {
   getCustomerContactsStats,
   deleteContact,
   bulkDeleteContacts,
-  clearAllContacts
+  clearAllContacts,
+  removeDuplicateContacts,
 };

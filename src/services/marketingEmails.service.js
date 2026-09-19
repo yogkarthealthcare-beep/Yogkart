@@ -30,7 +30,51 @@ CREATE INDEX IF NOT EXISTS idx_marketing_emails_sent_at ON marketing_emails (sen
  */
 const ensureMarketingEmailsSchema = async () => {
   try {
-    await query(MARKETING_EMAILS_SCHEMA_SQL);
+    await query(`
+      CREATE TABLE IF NOT EXISTS marketing_emails (
+        id BIGSERIAL PRIMARY KEY,
+        name VARCHAR(255) DEFAULT '',
+        email VARCHAR(255) NOT NULL,
+        contact VARCHAR(100) DEFAULT '',
+        address TEXT DEFAULT '',
+        country VARCHAR(100) DEFAULT '',
+        status VARCHAR(30) NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Sending', 'Sent', 'Failed')),
+        sent_at TIMESTAMPTZ NULL,
+        last_error TEXT NULL,
+        campaign_name VARCHAR(255) NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Clean any existing duplicates before creating unique index
+    await query(`
+      WITH duplicates AS (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY LOWER(TRIM(email))
+                 ORDER BY 
+                   CASE WHEN status = 'Sent' THEN 1 WHEN status = 'Sending' THEN 2 ELSE 3 END ASC,
+                   created_at DESC,
+                   id DESC
+               ) as rnum
+        FROM marketing_emails
+        WHERE email IS NOT NULL AND email != ''
+      )
+      DELETE FROM marketing_emails
+      WHERE id IN (
+        SELECT id FROM duplicates WHERE rnum > 1
+      );
+    `);
+
+    await query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_marketing_emails_email_unique ON marketing_emails (LOWER(TRIM(email)));
+      CREATE INDEX IF NOT EXISTS idx_marketing_emails_status ON marketing_emails (status);
+      CREATE INDEX IF NOT EXISTS idx_marketing_emails_country ON marketing_emails (country);
+      CREATE INDEX IF NOT EXISTS idx_marketing_emails_created_at ON marketing_emails (created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_marketing_emails_sent_at ON marketing_emails (sent_at DESC);
+    `);
     console.log('✅ Marketing emails schema verified/created');
   } catch (err) {
     console.error('❌ Error ensuring marketing_emails schema:', err.message);
@@ -679,6 +723,33 @@ const getExportRecords = async ({ status = '', country = '', search = '', ids = 
   return res.rows;
 };
 
+/**
+ * Removes duplicate emails from marketing_emails, keeping the best record (e.g. Sent status preferred, latest created_at)
+ */
+const removeDuplicateEmails = async () => {
+  const querySql = `
+    WITH duplicates AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY LOWER(TRIM(email))
+               ORDER BY 
+                 CASE WHEN status = 'Sent' THEN 1 WHEN status = 'Sending' THEN 2 ELSE 3 END ASC,
+                 created_at DESC,
+                 id DESC
+             ) as rnum
+      FROM marketing_emails
+      WHERE email IS NOT NULL AND email != ''
+    )
+    DELETE FROM marketing_emails
+    WHERE id IN (
+      SELECT id FROM duplicates WHERE rnum > 1
+    )
+    RETURNING id;
+  `;
+  const res = await query(querySql);
+  return res.rowCount || 0;
+};
+
 module.exports = {
   ensureMarketingEmailsSchema,
   previewExcelBuffer,
@@ -691,4 +762,5 @@ module.exports = {
   bulkDeleteMarketingEmails,
   resetMarketingEmailStatus,
   getExportRecords,
+  removeDuplicateEmails,
 };
