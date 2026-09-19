@@ -24,6 +24,10 @@ const sitemapIndex = async (_req, res) => {
 
     sitemapsXml += `
   <sitemap>
+    <loc>${SITE_URL}/sitemap-blogs.xml</loc>
+    <lastmod>${new Date().toISOString()}</lastmod>
+  </sitemap>
+  <sitemap>
     <loc>${SITE_URL}/image-sitemap.xml</loc>
     <lastmod>${new Date().toISOString()}</lastmod>
   </sitemap>
@@ -45,6 +49,45 @@ ${sitemapsXml}
 };
 
 /**
+ * Dedicated Dynamic XML Sitemap for Blog Articles
+ */
+const blogsSitemap = async (_req, res) => {
+  try {
+    const { rows: blogs } = await db.query(
+      `SELECT slug, updated_at, created_at FROM blogs WHERE is_published = TRUE ORDER BY updated_at DESC`
+    );
+
+    let urlsXml = `
+  <url>
+    <loc>${escapeXml(`${SITE_URL}/blog`)}</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`;
+
+    blogs.forEach(b => {
+      const lastMod = b.updated_at || b.created_at || new Date();
+      urlsXml += `
+  <url>
+    <loc>${escapeXml(`${SITE_URL}/blog/${b.slug}`)}</loc>
+    <lastmod>${new Date(lastMod).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+    });
+
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlsXml}
+</urlset>`
+    );
+  } catch (err) {
+    console.error('blogsSitemap error:', err);
+    res.status(500).type('text/plain').send('Could not generate blogs sitemap');
+  }
+};
+
+/**
  * Per-Locale XML Sitemap (e.g. /sitemap-en-in.xml, /sitemap-en-us.xml)
  */
 const localeSitemap = async (req, res) => {
@@ -53,6 +96,7 @@ const localeSitemap = async (req, res) => {
 
     const { rows: courses } = await db.query(`SELECT slug, updated_at FROM courses WHERE is_active = TRUE LIMIT 100`);
     const { rows: products } = await db.query(`SELECT slug, updated_at FROM products WHERE is_active = TRUE LIMIT 100`);
+    const { rows: blogs } = await db.query(`SELECT slug, updated_at, created_at FROM blogs WHERE is_published = TRUE LIMIT 100`);
 
     const basePages = ['/', '/courses', '/find-teachers', '/pricing', '/fitness-centers', '/products', '/blog', '/verify-certificate'];
 
@@ -91,6 +135,17 @@ const localeSitemap = async (req, res) => {
     <lastmod>${new Date(p.updated_at).toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+  </url>`;
+    });
+
+    blogs.forEach(b => {
+      const lastMod = b.updated_at || b.created_at || new Date();
+      urlsXml += `
+  <url>
+    <loc>${escapeXml(`${SITE_URL}/${localeCode}/blog/${b.slug}`)}</loc>
+    <lastmod>${new Date(lastMod).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>`;
     });
 
@@ -208,12 +263,14 @@ Disallow: /checkout/
 Disallow: /api/private/
 
 ${crawlerRules}Sitemap: ${SITE_URL}/sitemap-index.xml
+Sitemap: ${SITE_URL}/sitemap.xml
+Sitemap: ${SITE_URL}/sitemap-blogs.xml
 Sitemap: ${SITE_URL}/image-sitemap.xml
 Sitemap: ${SITE_URL}/video-sitemap.xml
 `);
   } catch (err) {
     console.error('robots error:', err);
-    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${SITE_URL}/sitemap-index.xml`);
+    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${SITE_URL}/sitemap-index.xml\nSitemap: ${SITE_URL}/sitemap-blogs.xml`);
   }
 };
 
@@ -332,6 +389,7 @@ const getPageSeo = async (req, res) => {
 module.exports = {
   sitemapIndex,
   localeSitemap,
+  blogsSitemap,
   imageSitemap,
   videoSitemap,
   robots,

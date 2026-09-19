@@ -46,6 +46,7 @@ const uploadRoutes          = require('./routes/upload.routes');
 const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
 const navigationRoutes      = require('./routes/navigation.routes');
 const settingsRoutes        = require('./routes/settings.routes');
+const newsletterRoutes      = require('./routes/newsletter.routes');
 
 const app = express();
 
@@ -160,6 +161,7 @@ app.get('/health', (req, res) => {
 });
 app.get('/sitemap-index.xml', seoController.sitemapIndex);
 app.get('/sitemap.xml', seoController.sitemapIndex);
+app.get('/sitemap-blogs.xml', seoController.blogsSitemap);
 app.get('/sitemap-:locale.xml', seoController.localeSitemap);
 app.get('/image-sitemap.xml', seoController.imageSitemap);
 app.get('/video-sitemap.xml', seoController.videoSitemap);
@@ -209,6 +211,8 @@ app.use('/api',                          stepTrackingRoutes);
 app.use('/api/analytics',                analyticsRoutes);
 app.use('/api/navigation',               navigationRoutes);
 app.use('/api/settings',                 settingsRoutes);
+app.use('/api/newsletter',               newsletterRoutes);
+app.use('/api/customer-contacts',        newsletterRoutes);
 
 
 // 404
