@@ -1,12 +1,12 @@
-const { query } = require('../config/database');
+const newsletterService = require('../services/newsletter.service');
 
 /**
- * POST /api/newsletter/subscribe
- * Body: { email, name, contact }
+ * Public: POST /api/newsletter/subscribe
+ * Body: { email, name, source }
  */
 const subscribe = async (req, res) => {
   try {
-    const { email, name, contact } = req.body || {};
+    const { email, name, source } = req.body || {};
 
     if (!email || !String(email).trim()) {
       return res.status(400).json({
@@ -24,42 +24,20 @@ const subscribe = async (req, res) => {
       });
     }
 
-    const cleanName = String(name || '').trim() || 'Newsletter Subscriber';
-    const cleanContact = String(contact || '').trim();
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const subscriber = await newsletterService.subscribe({
+      email: cleanEmail,
+      name: name || '',
+      ipAddress,
+      source: source || 'Home Page Newsletter'
+    });
 
-    // Check if already in customer_contacts
-    const existingRes = await query(
-      `SELECT id, email, source_table, created_at FROM customer_contacts WHERE LOWER(email) = $1 LIMIT 1`,
-      [cleanEmail]
-    );
-
-    if (existingRes.rows.length > 0) {
-      return res.json({
-        success: true,
-        message: 'You are already subscribed to Yogkart Newsletter! Use coupon code YOGKART15 for 15% OFF.',
-        data: {
-          email: cleanEmail,
-          couponCode: 'YOGKART15',
-          discount: '15% OFF',
-          alreadySubscribed: true
-        }
-      });
-    }
-
-    // Insert new contact into customer_contacts table
-    const insertRes = await query(
-      `INSERT INTO customer_contacts (name, email, contact, address, country, source_table, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-       RETURNING id, name, email, contact, source_table, created_at`,
-      [cleanName, cleanEmail, cleanContact, '', 'India', 'Newsletter Subscriber']
-    );
-
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: 'Thank you for subscribing! Your 15% discount coupon is YOGKART15.',
       data: {
-        id: insertRes.rows[0].id,
-        email: cleanEmail,
+        id: subscriber.id,
+        email: subscriber.email,
         couponCode: 'YOGKART15',
         discount: '15% OFF'
       }
@@ -73,6 +51,116 @@ const subscribe = async (req, res) => {
   }
 };
 
+/**
+ * Admin: GET /api/admin/newsletter
+ */
+const getSubscribers = async (req, res) => {
+  try {
+    const { page, limit, search, status } = req.query;
+    const result = await newsletterService.getSubscribers({ page, limit, search, status });
+    return res.json({
+      success: true,
+      data: result
+    });
+  } catch (err) {
+    console.error('❌ Error fetching newsletter subscribers:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch newsletter subscribers.'
+    });
+  }
+};
+
+/**
+ * Admin: GET /api/admin/newsletter/stats
+ */
+const getStats = async (req, res) => {
+  try {
+    const stats = await newsletterService.getStats();
+    return res.json({
+      success: true,
+      data: stats
+    });
+  } catch (err) {
+    console.error('❌ Error fetching newsletter stats:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch newsletter statistics.'
+    });
+  }
+};
+
+/**
+ * Admin: DELETE /api/admin/newsletter/:id
+ */
+const deleteSubscriber = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await newsletterService.deleteSubscriber(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Subscriber not found.' });
+    }
+    return res.json({ success: true, message: 'Subscriber deleted successfully.', data: deleted });
+  } catch (err) {
+    console.error('❌ Error deleting subscriber:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete subscriber.' });
+  }
+};
+
+/**
+ * Admin: POST /api/admin/newsletter/delete-bulk
+ */
+const bulkDelete = async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'No subscriber IDs provided.' });
+    }
+    const result = await newsletterService.bulkDelete(ids);
+    return res.json({ success: true, message: `${result.deletedCount} subscribers deleted successfully.` });
+  } catch (err) {
+    console.error('❌ Error bulk deleting subscribers:', err);
+    return res.status(500).json({ success: false, message: 'Failed to bulk delete subscribers.' });
+  }
+};
+
+/**
+ * Admin: PATCH /api/admin/newsletter/:id/status
+ */
+const updateStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body || {};
+    const updated = await newsletterService.updateStatus(id, status);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Subscriber not found.' });
+    }
+    return res.json({ success: true, message: 'Subscriber status updated.', data: updated });
+  } catch (err) {
+    console.error('❌ Error updating subscriber status:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update subscriber status.' });
+  }
+};
+
+/**
+ * Admin: GET /api/admin/newsletter/export
+ */
+const exportAll = async (req, res) => {
+  try {
+    const records = await newsletterService.getAllForExport();
+    return res.json({ success: true, data: records });
+  } catch (err) {
+    console.error('❌ Error exporting subscribers:', err);
+    return res.status(500).json({ success: false, message: 'Failed to export subscribers.' });
+  }
+};
+
 module.exports = {
-  subscribe
+  subscribe,
+  getSubscribers,
+  getStats,
+  deleteSubscriber,
+  bulkDelete,
+  updateStatus,
+  exportAll
 };

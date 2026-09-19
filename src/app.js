@@ -45,8 +45,9 @@ const analyticsRoutes       = require('./routes/analytics.routes');
 const uploadRoutes          = require('./routes/upload.routes');
 const { STORAGE_ROOT_DIR, ensureStorageDirs } = require('./config/storage');
 const navigationRoutes      = require('./routes/navigation.routes');
-const settingsRoutes        = require('./routes/settings.routes');
 const newsletterRoutes      = require('./routes/newsletter.routes');
+const adminNewsletterRoutes = require('./routes/admin.newsletter.routes');
+const { ensureNewsletterSchema } = require('./services/newsletter.service');
 
 const app = express();
 
@@ -129,6 +130,7 @@ ensureDatabaseSchema().catch(err => console.error('Error ensuring core database 
 ensureInstagramReelsSchema().catch(err => console.error('Error ensuring instagram_reels schema:', err));
 ensureMarketplaceSchema().catch(err => console.error('Error ensuring marketplace schema:', err));
 ensureCustomerContactsSchema().catch(err => console.error('Error ensuring customer_contacts schema:', err));
+ensureNewsletterSchema().catch(err => console.error('Error ensuring newsletter_subscribers schema:', err));
 
 // ── VPS Local Storage Static Serving (Cross-Origin Enabled) ──
 app.use('/uploads', (req, res, next) => {
@@ -181,6 +183,7 @@ app.use('/api/admin-auth', authLimiter,  adminAuthRoutes);
 app.use('/api/upload',                   uploadRoutes);
 app.use('/api/admin/upload',             uploadRoutes);
 app.use('/api/admin/customer-contacts',  adminCustomerContactsRoutes);
+app.use('/api/admin/newsletter',         adminNewsletterRoutes);
 app.use('/api/admin',                    adminRoutes);
 app.use('/api/seo',                      publicSeoRoutes);
 app.use('/api/admin/seo',                adminSeoRoutes);

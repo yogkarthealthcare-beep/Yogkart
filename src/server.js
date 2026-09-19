@@ -9,6 +9,8 @@ const { ensureInstagramReelsSchema } = require('./services/instagram.service');
 const { ensureMarketplaceSchema } = require('./services/marketplace.service');
 const { ensureNavigationSchema } = require('./services/navigation.service');
 const { ensureSettingsSchema } = require('./services/settings.service');
+const { ensureCustomerContactsSchema } = require('./services/customerContacts.service');
+const { ensureNewsletterSchema } = require('./services/newsletter.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -33,6 +35,8 @@ const server = app.listen(PORT, () => {
         ensureMarketplaceSchema(),
         ensureNavigationSchema(),
         ensureSettingsSchema(),
+        ensureCustomerContactsSchema(),
+        ensureNewsletterSchema(),
       ]);
       console.log('✅ Database connection and schemas initialized successfully');
     } catch (dbErr) {
