@@ -100,18 +100,67 @@ const getAmazonCredentials = async ({ integrationId = null, requireConfigured = 
  * Fetch all saved Amazon integrations and active credentials for Admin UI.
  */
 const getAdminAmazonCredentials = async ({ integrationId = null } = {}) => {
+  // 1. Fetch from amazon_integrations table
   const allRes = await query(
     `SELECT * FROM amazon_integrations ORDER BY is_active DESC, updated_at DESC, created_at ASC`
   );
 
-  const integrations = allRes.rows.map(formatAdminIntegration);
+  let integrations = allRes.rows.map(formatAdminIntegration);
+
+  // 2. Check system_credentials table for any Amazon credentials saved separately
+  try {
+    const sysRes = await query(
+      `SELECT id, credential_key, credential_value, credential_category, description, is_active FROM system_credentials
+       WHERE credential_key ILIKE '%amazon%' OR credential_category = 'amazon' OR credential_key ILIKE '%sp_api%'`
+    );
+
+    if (sysRes.rows.length > 0) {
+      let sysClientId = '';
+      let sysClientSecret = '';
+      let sysRefreshToken = '';
+
+      for (const row of sysRes.rows) {
+        const val = safeDecrypt(row.credential_value);
+        const k = row.credential_key.toLowerCase();
+        if (k.includes('client_id') || k.includes('app_id')) {
+          sysClientId = val;
+        } else if (k.includes('secret')) {
+          sysClientSecret = val;
+        } else if (k.includes('token') || k.includes('refresh')) {
+          sysRefreshToken = val;
+        }
+      }
+
+      if (sysClientId && !integrations.some(i => i.clientId === sysClientId)) {
+        // Auto-insert found system credential into amazon_integrations
+        const autoInsert = await query(
+          `INSERT INTO amazon_integrations (
+            account_name, client_id_encrypted, client_secret_encrypted,
+            refresh_token_encrypted, marketplace_id, region, endpoint, is_active
+          ) VALUES ($1, $2, $3, $4, 'A21TJRUUN4KGV', 'eu-west-1', 'https://sellingpartnerapi-eu.amazon.com', TRUE)
+          RETURNING *`,
+          [
+            'Amazon Account (System Credentials)',
+            encryptCredential(sysClientId),
+            sysClientSecret ? encryptCredential(sysClientSecret) : null,
+            sysRefreshToken ? encryptCredential(sysRefreshToken) : null,
+          ]
+        );
+        if (autoInsert.rows.length) {
+          integrations.push(formatAdminIntegration(autoInsert.rows[0]));
+        }
+      }
+    }
+  } catch (sysErr) {
+    console.warn('⚠️ [amazonCredentials] system_credentials check notice:', sysErr.message);
+  }
 
   let active = null;
   if (integrationId && isValidUuid(integrationId)) {
     active = integrations.find(i => i.id === integrationId) || null;
   }
   if (!active && integrations.length > 0) {
-    active = integrations.find(i => i.isActive) || integrations[0];
+    active = integrations.find(i => i.isActive && i.isConfigured) || integrations[0];
   }
 
   if (!active) {
