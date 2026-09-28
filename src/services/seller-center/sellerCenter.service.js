@@ -203,7 +203,7 @@ const getAmazonOrders = async ({
   const countRes = await query(countSql, params);
   const total = countRes.rows[0]?.total || 0;
 
-  // Data query with aggregated items summary
+  // Data query with subquery items summary (avoids GROUP BY issues in PostgreSQL)
   const dataSql = `
     SELECT
       o.id,
@@ -222,21 +222,23 @@ const getAmazonOrders = async ({
       o.shipping_state,
       o.synced_at,
       COALESCE(
-        json_agg(
-          json_build_object(
-            'id', oi.id,
-            'asin', oi.asin,
-            'sellerSku', oi.seller_sku,
-            'title', oi.title,
-            'quantityOrdered', oi.quantity_ordered,
-            'itemPrice', oi.item_price_amount
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', oi.id,
+              'asin', oi.asin,
+              'sellerSku', oi.seller_sku,
+              'title', oi.title,
+              'quantityOrdered', oi.quantity_ordered,
+              'itemPrice', oi.item_price_amount
+            )
           )
-        ) FILTER (WHERE oi.id IS NOT NULL), '[]'::json
+          FROM amazon_order_items oi
+          WHERE oi.amazon_order_id = o.amazon_order_id
+        ), '[]'::json
       ) AS items
     FROM amazon_orders o
-    LEFT JOIN amazon_order_items oi ON oi.amazon_order_id = o.amazon_order_id
     ${whereSql}
-    GROUP BY o.id
     ORDER BY o.purchase_date DESC
     LIMIT $${pIdx++} OFFSET $${pIdx++}
   `;
