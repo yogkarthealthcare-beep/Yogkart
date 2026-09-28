@@ -57,8 +57,9 @@ router.all('/deploy-pull', (req, res) => {
   const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
   const workDir = isWin ? process.cwd() : defaultDir;
   const shell = isWin ? 'cmd.exe' : '/bin/bash';
-  const pullCmd = 'git pull origin main';
-  const restartCmd = isWin ? 'echo Dev environment restart skipped' : 'export PATH=/root/.nvm/versions/node/v22.16.0/bin:$PATH; pm2 restart yogkart || pm2 restart all';
+  const restartCmd = isWin
+    ? 'echo Dev environment restart skipped'
+    : 'export PATH=/root/.nvm/versions/node/v22.16.0/bin:$PATH; (sleep 1 && pm2 restart yogkart || pm2 restart all) > /dev/null 2>&1 &';
 
   exec(pullCmd, { cwd: workDir, shell }, (pullErr, pullStdout, pullStderr) => {
     if (pullErr) {
@@ -71,24 +72,31 @@ router.all('/deploy-pull', (req, res) => {
       });
     }
 
-    exec(restartCmd, { cwd: workDir, shell }, (restartErr, restartStdout, restartStderr) => {
-      if (restartErr) {
-        console.error('❌ [Auto-Deploy] PM2 restart failed:', restartErr.message);
-        return res.status(500).json({
-          success: false,
-          step: 'pm2 restart',
-          error: restartErr.message,
-          pullOutput: pullStdout
-        });
-      }
+    exec(restartCmd, { cwd: workDir, shell });
 
-      console.log('✅ [Auto-Deploy] VPS update and restart completed successfully!');
-      return res.json({
-        success: true,
-        message: '🚀 VPS updated & restarted successfully!',
-        pullOutput: pullStdout,
-        restartOutput: restartStdout
-      });
+    console.log('✅ [Auto-Deploy] Git pull complete. PM2 restart triggered in background.');
+    return res.json({
+      success: true,
+      message: '🚀 VPS git pull completed & PM2 restart scheduled!',
+      pullOutput: pullStdout,
+    });
+  });
+});
+
+/**
+ * GET /api/deploy-status
+ */
+router.all('/deploy-status', (req, res) => {
+  const isWin = process.platform === 'win32';
+  const fs = require('fs');
+  const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
+  const workDir = isWin ? process.cwd() : defaultDir;
+  const shell = isWin ? 'cmd.exe' : '/bin/bash';
+
+  exec('git log -n 1 --oneline', { cwd: workDir, shell }, (err, stdout) => {
+    return res.json({
+      success: true,
+      lastCommit: stdout ? stdout.trim() : (err ? err.message : 'unknown'),
     });
   });
 });

@@ -98,9 +98,6 @@ const spApiRequest = async (credentials, path, options = {}) => {
 /**
  * Test SP-API Connection and verify credentials.
  */
-/**
- * Test SP-API Connection and verify credentials.
- */
 const testConnection = async (integrationId = null) => {
   let credentials;
   try {
@@ -113,47 +110,75 @@ const testConnection = async (integrationId = null) => {
     };
   }
 
+  // 1. Verify LWA Token Exchange
+  let accessToken;
   try {
-    // 1. Verify LWA Token Exchange
-    const accessToken = await getLwaAccessToken(credentials);
+    accessToken = await getLwaAccessToken(credentials);
     if (!accessToken) {
       throw new Error('Could not obtain Amazon access token');
     }
+  } catch (lwaErr) {
+    const errorMsg = lwaErr.message || 'LWA Token authentication failed. Please check Client ID, Secret, and Refresh Token.';
+    await updateAmazonConnectionStatus('ERROR', errorMsg, credentials?.id || integrationId);
+    return {
+      success: false,
+      message: errorMsg,
+      testedAt: new Date().toISOString(),
+    };
+  }
 
-    // 2. Call Marketplace Participations or Orders endpoint to verify API permissions
-    let participationInfo = null;
+  // 2. Test SP-API Endpoint Permissions
+  let apiSuccess = false;
+  let lastApiError = null;
+
+  // Try endpoint 1: Marketplace Participations
+  try {
+    await spApiRequest(credentials, '/sellers/v1/marketplaceParticipations');
+    apiSuccess = true;
+  } catch (err1) {
+    lastApiError = err1.message;
+  }
+
+  // Try endpoint 2: Orders endpoint
+  if (!apiSuccess) {
     try {
-      const participations = await spApiRequest(credentials, '/sellers/v1/marketplaceParticipations');
-      participationInfo = participations?.payload || participations;
-    } catch (apiErr) {
-      // If sellers API isn't authorized, try lightweight orders call
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       await spApiRequest(
         credentials,
         `/orders/v0/orders?MarketplaceIds=${encodeURIComponent(credentials.marketplaceId)}&CreatedAfter=${encodeURIComponent(thirtyDaysAgo)}&MaxResultsPerPage=1`
       );
+      apiSuccess = true;
+    } catch (err2) {
+      lastApiError = err2.message;
     }
+  }
 
+  if (apiSuccess) {
     await updateAmazonConnectionStatus('CONNECTED', null, credentials.id);
-
     return {
       success: true,
-      message: 'Amazon SP-API connection verified successfully',
+      message: '✓ Amazon SP-API connection verified successfully! LWA Token & SP-API permissions are active.',
       marketplaceId: credentials.marketplaceId,
       region: credentials.region,
       accountName: credentials.accountName,
       testedAt: new Date().toISOString(),
-      participations: participationInfo,
-    };
-  } catch (err) {
-    const cleanError = err.message || 'Amazon SP-API connection failed';
-    await updateAmazonConnectionStatus('ERROR', cleanError, credentials?.id || integrationId);
-    return {
-      success: false,
-      message: cleanError,
-      testedAt: new Date().toISOString(),
     };
   }
+
+  // If LWA succeeded but SP-API returned 403 / Access Denied
+  const isAccessDenied = lastApiError && (lastApiError.includes('denied') || lastApiError.includes('Unauthorized') || lastApiError.includes('403'));
+  
+  const diagnosticMsg = isAccessDenied
+    ? 'LWA Login Verified! (Client ID, Secret & Token are genuine). Note: Amazon SP-API returned "Access to requested resource is denied". To resolve this in Amazon Seller Central: Go to Developer Central → Edit App → Ensure Roles ("Pricing", "Inventory & Order Tracking", "Amazon Fulfillment") are enabled, and click "Authorize" again to generate an updated token.'
+    : (lastApiError || 'SP-API endpoint permission verification failed');
+
+  await updateAmazonConnectionStatus(isAccessDenied ? 'PARTIALLY_CONNECTED' : 'ERROR', diagnosticMsg, credentials?.id || integrationId);
+
+  return {
+    success: false,
+    message: diagnosticMsg,
+    testedAt: new Date().toISOString(),
+  };
 };
 
 /**
