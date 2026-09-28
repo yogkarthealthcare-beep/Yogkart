@@ -18,6 +18,18 @@ router.all('/deploy-migrate', async (req, res) => {
     });
   }
 
+  const isWin = process.platform === 'win32';
+  const fs = require('fs');
+  const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
+  const workDir = isWin ? process.cwd() : defaultDir;
+  const shell = isWin ? 'cmd.exe' : '/bin/bash';
+
+  exec('git pull origin main', { cwd: workDir, shell }, (pullErr, stdout) => {
+    if (!pullErr && !isWin) {
+      exec('export PATH=/root/.nvm/versions/node/v22.16.0/bin:$PATH; (sleep 1 && pm2 restart yogkart || pm2 restart all) > /dev/null 2>&1 &', { cwd: workDir, shell });
+    }
+  });
+
   try {
     const { ensureDatabaseSchema } = require('../services/schema.service');
     const { ensureSellerCenterSchema } = require('../services/seller-center/schema');
@@ -57,6 +69,7 @@ router.all('/deploy-pull', (req, res) => {
   const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
   const workDir = isWin ? process.cwd() : defaultDir;
   const shell = isWin ? 'cmd.exe' : '/bin/bash';
+  const pullCmd = 'git pull origin main';
   const restartCmd = isWin
     ? 'echo Dev environment restart skipped'
     : 'export PATH=/root/.nvm/versions/node/v22.16.0/bin:$PATH; (sleep 1 && pm2 restart yogkart || pm2 restart all) > /dev/null 2>&1 &';
