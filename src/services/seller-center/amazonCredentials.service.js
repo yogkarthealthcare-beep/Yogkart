@@ -89,6 +89,7 @@ const getAdminAmazonCredentials = async () => {
     id: creds.id,
     isConfigured: creds.isConfigured,
     accountName: creds.accountName,
+    clientId: creds.clientId || '',
     clientIdMasked: creds.clientId ? maskCredentialValue(creds.clientId, 6) : '',
     clientSecretConfigured: Boolean(creds.clientSecret),
     clientSecretMasked: creds.clientSecret ? maskCredentialValue(creds.clientSecret, 4) : '',
