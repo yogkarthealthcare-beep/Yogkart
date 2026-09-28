@@ -100,11 +100,12 @@ const syncAmazonLive = async (req, res) => {
 
 /**
  * GET /api/admin/seller-center/amazon/settings
- * Returns masked credentials safe for Admin UI.
+ * Returns all saved integrations and the active integration for Admin UI.
  */
 const getAmazonSettings = async (req, res) => {
   try {
-    const data = await amazonCredentialsService.getAdminAmazonCredentials();
+    const { integrationId } = req.query;
+    const data = await amazonCredentialsService.getAdminAmazonCredentials({ integrationId });
     return success(res, 'Amazon settings fetched successfully', data);
   } catch (err) {
     console.error('Error fetching Amazon settings:', err);
@@ -114,7 +115,7 @@ const getAmazonSettings = async (req, res) => {
 
 /**
  * POST /api/admin/seller-center/amazon/settings
- * Saves encrypted credentials into database without overwriting unchanged secrets.
+ * Saves / Updates credentials in database.
  */
 const saveAmazonSettings = async (req, res) => {
   try {
@@ -128,12 +129,27 @@ const saveAmazonSettings = async (req, res) => {
 };
 
 /**
+ * DELETE /api/admin/seller-center/amazon/settings/:id
+ */
+const deleteAmazonSettings = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await amazonCredentialsService.deleteAmazonIntegration(id);
+    return success(res, 'Amazon integration deleted successfully', data);
+  } catch (err) {
+    console.error('Error deleting Amazon settings:', err);
+    return serverError(res, err.message || 'Failed to delete Amazon settings');
+  }
+};
+
+/**
  * POST /api/admin/seller-center/amazon/test-connection
  * Tests live authentication with Amazon SP-API using database credentials.
  */
 const testAmazonConnection = async (req, res) => {
   try {
-    const result = await amazonSpApiService.testConnection();
+    const { integrationId } = req.body;
+    const result = await amazonSpApiService.testConnection(integrationId);
     if (result.success) {
       return success(res, result.message, result);
     } else {
@@ -168,6 +184,7 @@ module.exports = {
   syncAmazonLive,
   getAmazonSettings,
   saveAmazonSettings,
+  deleteAmazonSettings,
   testAmazonConnection,
   getSyncLogs,
 };

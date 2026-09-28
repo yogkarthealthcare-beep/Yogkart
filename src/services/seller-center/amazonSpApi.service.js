@@ -98,8 +98,20 @@ const spApiRequest = async (credentials, path, options = {}) => {
 /**
  * Test SP-API Connection and verify credentials.
  */
-const testConnection = async () => {
-  const credentials = await getAmazonCredentials({ requireConfigured: true });
+/**
+ * Test SP-API Connection and verify credentials.
+ */
+const testConnection = async (integrationId = null) => {
+  let credentials;
+  try {
+    credentials = await getAmazonCredentials({ integrationId, requireConfigured: true });
+  } catch (credErr) {
+    return {
+      success: false,
+      message: credErr.message || 'Credentials not configured',
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   try {
     // 1. Verify LWA Token Exchange
@@ -122,7 +134,7 @@ const testConnection = async () => {
       );
     }
 
-    await updateAmazonConnectionStatus('CONNECTED', null);
+    await updateAmazonConnectionStatus('CONNECTED', null, credentials.id);
 
     return {
       success: true,
@@ -135,7 +147,7 @@ const testConnection = async () => {
     };
   } catch (err) {
     const cleanError = err.message || 'Amazon SP-API connection failed';
-    await updateAmazonConnectionStatus('ERROR', cleanError);
+    await updateAmazonConnectionStatus('ERROR', cleanError, credentials?.id || integrationId);
     return {
       success: false,
       message: cleanError,

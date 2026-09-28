@@ -6,14 +6,52 @@ const {
 } = require('../../utils/encryption');
 
 const safeDecrypt = (val) => (val ? decryptCredential(val) : '');
+const isValidUuid = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+/**
+ * Format raw database row into safe admin UI representation.
+ */
+const formatAdminIntegration = (row) => {
+  if (!row) return null;
+  const clientId = safeDecrypt(row.client_id_encrypted);
+  const clientSecret = safeDecrypt(row.client_secret_encrypted);
+  const refreshToken = safeDecrypt(row.refresh_token_encrypted);
+  const isConfigured = Boolean(clientId && clientSecret && refreshToken);
+
+  return {
+    id: row.id,
+    accountName: row.account_name || 'Amazon India Seller Store',
+    clientId: clientId || '',
+    clientIdMasked: clientId ? maskCredentialValue(clientId, 6) : '',
+    clientSecretConfigured: Boolean(clientSecret),
+    clientSecretMasked: clientSecret ? maskCredentialValue(clientSecret, 4) : '',
+    refreshTokenConfigured: Boolean(refreshToken),
+    refreshTokenMasked: refreshToken ? maskCredentialValue(refreshToken, 4) : '',
+    marketplaceId: row.marketplace_id || 'A21TJRUUN4KGV',
+    region: row.region || 'eu-west-1',
+    endpoint: row.endpoint || 'https://sellingpartnerapi-eu.amazon.com',
+    sellerId: row.seller_id || '',
+    isActive: row.is_active ?? true,
+    connectionStatus: row.connection_status || 'NOT_CONNECTED',
+    lastTestedAt: row.last_tested_at,
+    lastSyncAt: row.last_sync_at,
+    lastErrorMessage: row.last_error_message,
+    isConfigured,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 /**
  * Fetch raw decrypted Amazon SP-API credentials for backend execution only.
  */
-const getAmazonCredentials = async ({ requireConfigured = false } = {}) => {
-  const result = await query(
-    `SELECT * FROM amazon_integrations ORDER BY created_at ASC LIMIT 1`
-  );
+const getAmazonCredentials = async ({ integrationId = null, requireConfigured = false } = {}) => {
+  let result;
+  if (isValidUuid(integrationId)) {
+    result = await query(`SELECT * FROM amazon_integrations WHERE id = $1 LIMIT 1`, [integrationId]);
+  } else {
+    result = await query(`SELECT * FROM amazon_integrations ORDER BY is_active DESC, updated_at DESC, created_at ASC LIMIT 1`);
+  }
 
   if (!result.rows.length) {
     if (requireConfigured) {
@@ -28,7 +66,6 @@ const getAmazonCredentials = async ({ requireConfigured = false } = {}) => {
   const clientId = safeDecrypt(row.client_id_encrypted);
   const clientSecret = safeDecrypt(row.client_secret_encrypted);
   const refreshToken = safeDecrypt(row.refresh_token_encrypted);
-
   const isConfigured = Boolean(clientId && clientSecret && refreshToken);
 
   if (requireConfigured && !isConfigured) {
@@ -60,15 +97,28 @@ const getAmazonCredentials = async ({ requireConfigured = false } = {}) => {
 };
 
 /**
- * Fetch masked Amazon SP-API credentials safe for Admin UI.
- * Never exposes raw secret/refresh token to the browser.
+ * Fetch all saved Amazon integrations and active credentials for Admin UI.
  */
-const getAdminAmazonCredentials = async () => {
-  const creds = await getAmazonCredentials();
-  if (!creds) {
-    return {
+const getAdminAmazonCredentials = async ({ integrationId = null } = {}) => {
+  const allRes = await query(
+    `SELECT * FROM amazon_integrations ORDER BY is_active DESC, updated_at DESC, created_at ASC`
+  );
+
+  const integrations = allRes.rows.map(formatAdminIntegration);
+
+  let active = null;
+  if (integrationId && isValidUuid(integrationId)) {
+    active = integrations.find(i => i.id === integrationId) || null;
+  }
+  if (!active && integrations.length > 0) {
+    active = integrations.find(i => i.isActive) || integrations[0];
+  }
+
+  if (!active) {
+    active = {
       isConfigured: false,
       accountName: 'Amazon India Seller Store',
+      clientId: '',
       clientIdMasked: '',
       clientSecretConfigured: false,
       clientSecretMasked: '',
@@ -86,61 +136,71 @@ const getAdminAmazonCredentials = async () => {
   }
 
   return {
-    id: creds.id,
-    isConfigured: creds.isConfigured,
-    accountName: creds.accountName,
-    clientId: creds.clientId || '',
-    clientIdMasked: creds.clientId ? maskCredentialValue(creds.clientId, 6) : '',
-    clientSecretConfigured: Boolean(creds.clientSecret),
-    clientSecretMasked: creds.clientSecret ? maskCredentialValue(creds.clientSecret, 4) : '',
-    refreshTokenConfigured: Boolean(creds.refreshToken),
-    refreshTokenMasked: creds.refreshToken ? maskCredentialValue(creds.refreshToken, 4) : '',
-    marketplaceId: creds.marketplaceId,
-    region: creds.region,
-    endpoint: creds.endpoint,
-    sellerId: creds.sellerId,
-    isActive: creds.isActive,
-    connectionStatus: creds.connectionStatus,
-    lastTestedAt: creds.lastTestedAt,
-    lastSyncAt: creds.lastSyncAt,
-    lastErrorMessage: creds.lastErrorMessage,
+    ...active,
+    integrations,
   };
 };
 
 /**
  * Save / Update Amazon SP-API credentials in database.
- * If sensitive fields are left blank, existing encrypted values are preserved.
+ * Supports multiple accounts, updating existing by ID or adding new.
  */
 const saveAmazonCredentials = async (payload, adminId = null) => {
-  const existing = await getAmazonCredentials();
+  const targetId = isValidUuid(payload.id) ? payload.id : null;
+  const isNew = payload.isNew === true || payload.id === 'new';
 
-  const accountName = String(payload.accountName || existing?.accountName || 'Amazon India Seller Store').trim();
-  const marketplaceId = String(payload.marketplaceId || existing?.marketplaceId || 'A21TJRUUN4KGV').trim();
+  let existing = null;
+  if (targetId && !isNew) {
+    const existingRes = await query('SELECT * FROM amazon_integrations WHERE id = $1', [targetId]);
+    if (existingRes.rows.length) {
+      existing = existingRes.rows[0];
+    }
+  }
+  if (!existing && !isNew) {
+    const latestRes = await query('SELECT * FROM amazon_integrations ORDER BY is_active DESC, updated_at DESC LIMIT 1');
+    if (latestRes.rows.length) {
+      existing = latestRes.rows[0];
+    }
+  }
+
+  const existingClientId = existing ? safeDecrypt(existing.client_id_encrypted) : '';
+  const existingClientSecret = existing ? safeDecrypt(existing.client_secret_encrypted) : '';
+  const existingRefreshToken = existing ? safeDecrypt(existing.refresh_token_encrypted) : '';
+
+  const accountName = String(payload.accountName || existing?.account_name || 'Amazon India Seller Store').trim();
+  const marketplaceId = String(payload.marketplaceId || existing?.marketplace_id || 'A21TJRUUN4KGV').trim();
   const region = String(payload.region || existing?.region || 'eu-west-1').trim();
   const endpoint = String(payload.endpoint || existing?.endpoint || 'https://sellingpartnerapi-eu.amazon.com').trim();
-  const sellerId = String(payload.sellerId !== undefined ? payload.sellerId : (existing?.sellerId || '')).trim();
-  const isActive = payload.isActive !== undefined ? Boolean(payload.isActive) : (existing?.isActive ?? true);
+  const sellerId = String(payload.sellerId !== undefined ? payload.sellerId : (existing?.seller_id || '')).trim();
+  const isActive = payload.isActive !== undefined ? Boolean(payload.isActive) : true;
 
   // Preserve existing secret values if user left them empty / masked
   const clientId = payload.clientId && !payload.clientId.includes('••••') && !payload.clientId.includes('****')
     ? String(payload.clientId).trim()
-    : (existing?.clientId || '');
+    : existingClientId;
 
   const clientSecret = payload.clientSecret && !payload.clientSecret.includes('••••') && !payload.clientSecret.includes('****')
     ? String(payload.clientSecret).trim()
-    : (existing?.clientSecret || '');
+    : existingClientSecret;
 
   const refreshToken = payload.refreshToken && !payload.refreshToken.includes('••••') && !payload.refreshToken.includes('****')
     ? String(payload.refreshToken).trim()
-    : (existing?.refreshToken || '');
+    : existingRefreshToken;
 
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    let updatedResult;
-    if (existing?.id) {
-      updatedResult = await client.query(
+    let validAdminId = null;
+    if (isValidUuid(adminId)) {
+      const adminCheck = await client.query('SELECT id FROM admins WHERE id = $1', [adminId]);
+      if (adminCheck.rows.length) validAdminId = adminId;
+    }
+
+    let savedId = null;
+
+    if (existing?.id && !isNew) {
+      const updateRes = await client.query(
         `UPDATE amazon_integrations SET
           account_name = $1,
           client_id_encrypted = $2,
@@ -154,7 +214,7 @@ const saveAmazonCredentials = async (payload, adminId = null) => {
           updated_by = $10,
           updated_at = NOW()
         WHERE id = $11
-        RETURNING *`,
+        RETURNING id`,
         [
           accountName,
           clientId ? encryptCredential(clientId) : null,
@@ -165,18 +225,19 @@ const saveAmazonCredentials = async (payload, adminId = null) => {
           endpoint,
           sellerId || null,
           isActive,
-          adminId,
+          validAdminId,
           existing.id,
         ]
       );
+      savedId = updateRes.rows[0]?.id || existing.id;
     } else {
-      updatedResult = await client.query(
+      const insertRes = await client.query(
         `INSERT INTO amazon_integrations (
           account_name, client_id_encrypted, client_secret_encrypted,
           refresh_token_encrypted, marketplace_id, region, endpoint,
           seller_id, is_active, created_by, updated_by
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-        RETURNING *`,
+        RETURNING id`,
         [
           accountName,
           clientId ? encryptCredential(clientId) : null,
@@ -187,12 +248,12 @@ const saveAmazonCredentials = async (payload, adminId = null) => {
           endpoint,
           sellerId || null,
           isActive,
-          adminId,
+          validAdminId,
         ]
       );
+      savedId = insertRes.rows[0]?.id;
     }
 
-    // Update marketplace registry status
     const isNowConfigured = Boolean(clientId && clientSecret && refreshToken);
     await client.query(
       `UPDATE seller_marketplaces
@@ -202,7 +263,7 @@ const saveAmazonCredentials = async (payload, adminId = null) => {
     );
 
     await client.query('COMMIT');
-    return await getAdminAmazonCredentials();
+    return await getAdminAmazonCredentials({ integrationId: savedId });
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -212,17 +273,42 @@ const saveAmazonCredentials = async (payload, adminId = null) => {
 };
 
 /**
+ * Delete a saved Amazon integration by ID.
+ */
+const deleteAmazonIntegration = async (id) => {
+  if (!isValidUuid(id)) {
+    const error = new Error('Invalid integration ID');
+    error.status = 400;
+    throw error;
+  }
+  await query('DELETE FROM amazon_integrations WHERE id = $1', [id]);
+  return await getAdminAmazonCredentials();
+};
+
+/**
  * Update Amazon connection status in database after test / sync.
  */
-const updateAmazonConnectionStatus = async (status, errorMessage = null) => {
-  await query(
-    `UPDATE amazon_integrations SET
-      connection_status = $1,
-      last_tested_at = NOW(),
-      last_error_message = $2,
-      updated_at = NOW()`,
-    [status, errorMessage]
-  );
+const updateAmazonConnectionStatus = async (status, errorMessage = null, integrationId = null) => {
+  if (isValidUuid(integrationId)) {
+    await query(
+      `UPDATE amazon_integrations SET
+        connection_status = $1,
+        last_tested_at = NOW(),
+        last_error_message = $2,
+        updated_at = NOW()
+      WHERE id = $3`,
+      [status, errorMessage, integrationId]
+    );
+  } else {
+    await query(
+      `UPDATE amazon_integrations SET
+        connection_status = $1,
+        last_tested_at = NOW(),
+        last_error_message = $2,
+        updated_at = NOW()`,
+      [status, errorMessage]
+    );
+  }
 
   await query(
     `UPDATE seller_marketplaces SET
@@ -236,18 +322,29 @@ const updateAmazonConnectionStatus = async (status, errorMessage = null) => {
 /**
  * Update last successful sync timestamp.
  */
-const updateAmazonLastSyncTimestamp = async () => {
-  await query(
-    `UPDATE amazon_integrations SET
-      last_sync_at = NOW(),
-      updated_at = NOW()`
-  );
+const updateAmazonLastSyncTimestamp = async (integrationId = null) => {
+  if (isValidUuid(integrationId)) {
+    await query(
+      `UPDATE amazon_integrations SET
+        last_sync_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $1`,
+      [integrationId]
+    );
+  } else {
+    await query(
+      `UPDATE amazon_integrations SET
+        last_sync_at = NOW(),
+        updated_at = NOW()`
+    );
+  }
 };
 
 module.exports = {
   getAmazonCredentials,
   getAdminAmazonCredentials,
   saveAmazonCredentials,
+  deleteAmazonIntegration,
   updateAmazonConnectionStatus,
   updateAmazonLastSyncTimestamp,
 };

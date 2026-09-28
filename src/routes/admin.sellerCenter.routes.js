@@ -21,6 +21,7 @@ router.post('/amazon/sync', controller.syncAmazonLive);
 // Database Credentials & SP-API Connection Testing
 router.get('/amazon/settings', controller.getAmazonSettings);
 router.post('/amazon/settings', controller.saveAmazonSettings);
+router.delete('/amazon/settings/:id', controller.deleteAmazonSettings);
 router.post('/amazon/test-connection', controller.testAmazonConnection);
 
 // Sync Audit Logs

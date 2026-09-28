@@ -593,33 +593,57 @@ const syncAmazonLiveRecords = async (adminId = null) => {
 };
 
 /**
- * Get sync audit logs.
+ * Get sync audit logs safely.
  */
 const getSyncLogs = async ({ page = 1, limit = 10 } = {}) => {
-  const pageNum = Math.max(1, parseInt(page) || 1);
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
-  const offset = (pageNum - 1) * limitNum;
+  try {
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const offset = (pageNum - 1) * limitNum;
 
-  const countRes = await query(`SELECT COUNT(*)::int AS total FROM seller_center_sync_logs`);
-  const total = countRes.rows[0]?.total || 0;
+    const countRes = await query(`SELECT COUNT(*)::int AS total FROM seller_center_sync_logs`);
+    const total = countRes.rows[0]?.total || 0;
 
-  const logsRes = await query(`
-    SELECT l.*, a.name AS admin_name, a.email AS admin_email
-    FROM seller_center_sync_logs l
-    LEFT JOIN admins a ON a.id = l.admin_id
-    ORDER BY l.started_at DESC
-    LIMIT $1 OFFSET $2
-  `, [limitNum, offset]);
+    const logsRes = await query(`
+      SELECT
+        l.id,
+        l.marketplace,
+        l.sync_type,
+        l.started_at,
+        l.completed_at,
+        l.status,
+        l.records_fetched,
+        l.records_inserted,
+        l.records_updated,
+        l.products_fetched,
+        l.products_inserted,
+        l.products_updated,
+        l.error_message,
+        l.created_at,
+        COALESCE(a.name, 'Admin') AS admin_name,
+        a.email AS admin_email
+      FROM seller_center_sync_logs l
+      LEFT JOIN admins a ON a.id::text = l.admin_id::text
+      ORDER BY l.started_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limitNum, offset]);
 
-  return {
-    logs: logsRes.rows,
-    pagination: {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(total / limitNum) || 1,
-    },
-  };
+    return {
+      logs: logsRes.rows || [],
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  } catch (err) {
+    console.error('Error in getSyncLogs:', err.message);
+    return {
+      logs: [],
+      pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
+    };
+  }
 };
 
 module.exports = {
