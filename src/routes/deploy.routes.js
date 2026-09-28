@@ -84,21 +84,45 @@ router.all('/deploy-pull', (req, res) => {
 });
 
 /**
- * GET /api/deploy-status
+ * GET /api/deploy-debug-amazon?secret=yogkart_deploy_2026
  */
-router.all('/deploy-status', (req, res) => {
-  const isWin = process.platform === 'win32';
-  const fs = require('fs');
-  const defaultDir = fs.existsSync('/var/www/yogkart') ? '/var/www/yogkart' : '/var/www/yogkart_backend';
-  const workDir = isWin ? process.cwd() : defaultDir;
-  const shell = isWin ? 'cmd.exe' : '/bin/bash';
+router.all('/deploy-debug-amazon', async (req, res) => {
+  const providedSecret = req.query.secret || req.body.secret || req.headers['x-deploy-secret'];
+  if (providedSecret !== DEPLOY_SECRET) {
+    return res.status(403).json({ success: false, message: 'Unauthorized' });
+  }
 
-  exec('git log -n 1 --oneline', { cwd: workDir, shell }, (err, stdout) => {
+  try {
+    const { query } = require('../config/database');
+    const { safeDecrypt } = require('../services/seller-center/amazonCredentials.service');
+    const { decryptCredential } = require('../utils/encryption');
+
+    const amazonRows = await query('SELECT id, account_name, marketplace_id, region, client_id_encrypted, is_active, created_at, updated_at FROM amazon_integrations ORDER BY updated_at DESC');
+
+    const systemRows = await query(`SELECT id, credential_key, credential_category, is_active, created_at FROM system_credentials WHERE credential_key ILIKE '%amazon%' OR credential_key ILIKE '%sp_api%' OR credential_key ILIKE '%lwa%' OR credential_category = 'amazon'`);
+
+    const formattedAmazon = amazonRows.rows.map(r => ({
+      id: r.id,
+      account_name: r.account_name,
+      marketplace_id: r.marketplace_id,
+      region: r.region,
+      has_client_id: Boolean(r.client_id_encrypted),
+      client_id_decrypted_preview: r.client_id_encrypted ? (decryptCredential(r.client_id_encrypted)?.slice(0, 15) + '...') : null,
+      is_active: r.is_active,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+
     return res.json({
       success: true,
-      lastCommit: stdout ? stdout.trim() : (err ? err.message : 'unknown'),
+      amazon_integrations_count: amazonRows.rows.length,
+      amazon_integrations: formattedAmazon,
+      system_credentials_count: systemRows.rows.length,
+      system_credentials: systemRows.rows,
     });
-  });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 module.exports = router;
