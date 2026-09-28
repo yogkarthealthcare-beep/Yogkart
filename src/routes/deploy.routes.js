@@ -20,10 +20,12 @@ router.all('/deploy-migrate', async (req, res) => {
 
   try {
     const { ensureDatabaseSchema } = require('../services/schema.service');
+    const { ensureSellerCenterSchema } = require('../services/seller-center/schema');
     await ensureDatabaseSchema();
+    await ensureSellerCenterSchema();
     return res.json({
       success: true,
-      message: '✅ Core database schema & product columns verified/created successfully!'
+      message: '✅ Core database schema & Seller Center tables verified/created successfully!'
     });
   } catch (err) {
     console.error('❌ [Auto-Migrate] Error:', err.message);
