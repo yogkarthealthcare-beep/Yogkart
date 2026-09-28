@@ -7,6 +7,7 @@ const { ensureBannersSchema } = require('../src/services/banner.service');
 const { ensureBulkCommunicationSchema } = require('../src/services/bulkCommunication.service');
 const { ensureInstagramReelsSchema } = require('../src/services/instagram.service');
 const { ensureMarketplaceSchema } = require('../src/services/marketplace.service');
+const { ensureSellerCenterSchema } = require('../src/services/seller-center/schema');
 
 const { ensureDatabaseSchema } = require('../src/services/schema.service');
 
@@ -63,6 +64,7 @@ module.exports = async (req, res) => {
           ensureBulkCommunicationSchema(),
           ensureInstagramReelsSchema(),
           ensureMarketplaceSchema(),
+          ensureSellerCenterSchema(),
         ]);
         dbConnected = true;
       } catch (dbErr) {
