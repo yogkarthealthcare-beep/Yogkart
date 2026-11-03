@@ -51,3 +51,4 @@ VALUES
 SELECT setval(pg_get_serial_sequence('navigation_menus', 'id'), COALESCE((SELECT MAX(id) FROM navigation_menus), 1));
 
 COMMIT;
+

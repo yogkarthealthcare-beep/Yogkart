@@ -34,3 +34,4 @@ SET image = 'https://api.yogkart.com/uploads/products/yogkart-natural-neem-wood-
 WHERE id IN ('wooden-eco', 'wooden-combs', 'neem-wood-products', 'eco-collection');
 
 COMMIT;
+
