@@ -62,7 +62,8 @@ const protect = async (req, res, next) => {
 
 // ── Admin only ─────────────────────────────────────────
 const adminOnly = (req, res, next) => {
-  if (req.user?.role !== 'admin') {
+  const role = req.user?.role || req.admin?.role;
+  if (!['admin', 'super_admin'].includes(role)) {
     return forbidden(res, 'Admin access required');
   }
   next();
