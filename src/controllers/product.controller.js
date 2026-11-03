@@ -490,14 +490,46 @@ const getHomepageProducts = async (req, res) => {
 
     const allCurated = curatedRes.rows;
     const featured = allCurated.slice(0, limit);
-    const trending = allCurated.slice(0, limit);
-    const deals = allCurated.filter(p => {
-      const disc = Number(p.discount || 0);
-      const orig = Number(p.original_price || 0);
-      const pr = Number(p.price || 0);
-      const calcDisc = orig > pr ? Math.round(((orig - pr) / orig) * 100) : 0;
-      return disc >= 10 || calcDisc >= 10;
-    }).slice(0, limit);
+        let trending = allCurated.slice(limit, limit * 2);
+
+    const usedIds = new Set([...featured.map(x => x.id), ...trending.map(x => x.id)]);
+
+    // If trending needs more items, pull from active public products
+    if (trending.length < limit) {
+      const fallbackTrendingRes = await query(
+        `SELECT ${PRODUCT_FIELDS}
+         FROM products p
+         ${ACTIVE_CATEGORY_JOIN}
+         ${BESTSELLER_JOIN}
+         WHERE p.is_active = TRUE
+           AND (p.stock > 0 OR p.stock IS NULL)
+           AND ${ACTIVE_CATEGORY_CONDITION}
+           AND ${PUBLIC_CATEGORY_CONDITION}
+           ${usedIds.size > 0 ? `AND p.id NOT IN (${Array.from(usedIds).join(',')})` : ''}
+         ORDER BY p.review_count DESC, p.created_at DESC
+         LIMIT ${limit - trending.length}`
+      );
+      for (const row of fallbackTrendingRes.rows) {
+        trending.push(row);
+        usedIds.add(row.id);
+      }
+    }
+
+    // Deals: pull highest discount products that aren't already displayed
+    const dealsRes = await query(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       ${ACTIVE_CATEGORY_JOIN}
+       ${BESTSELLER_JOIN}
+       WHERE p.is_active = TRUE
+         AND (p.stock > 0 OR p.stock IS NULL)
+         AND ${ACTIVE_CATEGORY_CONDITION}
+         AND ${PUBLIC_CATEGORY_CONDITION}
+         ${usedIds.size > 0 ? `AND p.id NOT IN (${Array.from(usedIds).join(',')})` : ''}
+       ORDER BY COALESCE(p.discount, 0) DESC, p.created_at DESC
+       LIMIT ${limit}`
+    );
+    const deals = dealsRes.rows;
 
     return success(res, {
       featured,
