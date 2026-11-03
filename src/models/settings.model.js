@@ -18,6 +18,7 @@ class SettingsModel {
   }
 
   static async updateSetting(key, value, description = null) {
+    const formattedValue = (typeof value === 'object' && value !== null) ? JSON.stringify(value) : value;
     const sql = `
       INSERT INTO site_settings (setting_key, setting_value, description)
       VALUES ($1, $2, $3)
@@ -25,7 +26,7 @@ class SettingsModel {
       DO UPDATE SET setting_value = EXCLUDED.setting_value, description = COALESCE(EXCLUDED.description, site_settings.description), updated_at = NOW()
       RETURNING *
     `;
-    const result = await query(sql, [key, value, description]);
+    const result = await query(sql, [key, formattedValue, description]);
     return result.rows[0];
   }
 }
