@@ -43,3 +43,4 @@ SET show_in_menu = false, is_active = false
 WHERE id = 'bamboo-products';
 
 COMMIT;
+

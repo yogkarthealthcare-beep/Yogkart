@@ -16,3 +16,4 @@ SET is_best_seller = false
 WHERE is_best_seller = true;
 
 COMMIT;
+
