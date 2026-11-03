@@ -5,9 +5,12 @@ exports.getPublicSettings = async (req, res) => {
     // Return safe settings for public pages
     const announcement_bar = await SettingsModel.getSetting('announcement_bar');
     const product_page_settings = await SettingsModel.getSetting('product_page_settings');
+    const deal_settings = await SettingsModel.getSetting('deal_settings');
+    const homepage_sections = await SettingsModel.getSetting('homepage_sections');
+    const menu_bar = await SettingsModel.getSetting('menu_bar');
     res.json({ 
       success: true, 
-      data: { announcement_bar, product_page_settings } 
+      data: { announcement_bar, product_page_settings, deal_settings, homepage_sections, menu_bar } 
     });
   } catch (error) {
     console.error('Error fetching public settings:', error);
@@ -30,7 +33,7 @@ exports.updateSetting = async (req, res) => {
     const { key } = req.params;
     const { setting_value, description } = req.body;
     
-    if (!setting_value) {
+    if (setting_value === undefined) {
       return res.status(400).json({ success: false, message: 'setting_value is required' });
     }
     
