@@ -21,6 +21,11 @@ const getInventory = async (req, res) => {
     const params = [];
     let idx = 1;
 
+    // Only active (published) products should appear in inventory list
+    if (req.query.include_inactive !== 'true') {
+      conditions.push('p.is_active = TRUE');
+    }
+
     if (search) {
       conditions.push(
         `(p.name ILIKE $${idx} OR p.brand ILIKE $${idx})`

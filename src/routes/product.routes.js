@@ -8,6 +8,8 @@ router.get('/banners',          ctrl.getBanners);
 router.get('/homepage',         ctrl.getHomepageProducts);
 router.get('/featured',         ctrl.getFeatured);
 router.get('/bestsellers',      ctrl.getBestSellers);
+router.get('/reviews/summary',  ctrl.getReviewsSummary);
+router.get('/reviews/testimonials', ctrl.getFeaturedTestimonials);
 router.get('/:slug/variations', ctrl.getProductVariations);
 router.get('/:slug/related',    ctrl.getRelated);
 router.get('/:slug/reviews',    ctrl.getProductReviews);

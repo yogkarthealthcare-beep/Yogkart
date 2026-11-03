@@ -130,15 +130,18 @@ const getSocialPreview = async (req, res) => {
           '@type': 'Organization',
           name: 'YogKart'
         }
-      },
-      aggregateRating: {
+      }
+    };
+
+    if (Number(product.review_count || 0) > 0 && Number(rating || 0) > 0) {
+      schema.aggregateRating = {
         '@type': 'AggregateRating',
         ratingValue: rating.toFixed(1),
-        reviewCount: Number(product.review_count || 5),
+        reviewCount: Number(product.review_count),
         bestRating: '5',
         worstRating: '1',
-      },
-    };
+      };
+    }
 
     res.removeHeader('Content-Security-Policy');
     res.set({

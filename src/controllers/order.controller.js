@@ -14,7 +14,7 @@ const placeOrder = async (req, res) => {
   try {
     const {
       items, subtotal, discount = 0, delivery_fee = 0, tax = 0, total,
-      payment_method, address, coupon_code,
+      payment_method, address, coupon_code, email, utm
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -55,23 +55,48 @@ const placeOrder = async (req, res) => {
       ? Math.max(0, Number(subtotal || 0) + Number(delivery_fee || 0) + Number(tax || 0) - couponDiscount)
       : Number(total || 0);
 
-    // Insert order
+    // 1. Resolve User (Logged-in or link guest by phone/email - Task 2.1)
+    let userId = req.user ? req.user.id : null;
+    const customerEmail = String(email || address.email || (req.user && req.user.email) || '').trim().toLowerCase() || null;
+    const customerPhone = String(address.phone || '').trim();
+
+    if (!userId && (customerPhone || customerEmail)) {
+      const existingUser = await client.query(
+        `SELECT id FROM users WHERE phone = $1 OR (email IS NOT NULL AND email = $2) LIMIT 1`,
+        [customerPhone, customerEmail]
+      );
+      if (existingUser.rows.length > 0) {
+        userId = existingUser.rows[0].id;
+      }
+    }
+
+    // 2. Insert order with UTM and tracking info (Task 2.1 & 2.4)
     await client.query(
       `INSERT INTO orders (
         id, user_id, status, subtotal, discount, delivery_fee, tax, total,
         payment_method, payment_status,
         address_name, address_phone, address_line1, address_city, address_state, address_pincode,
-        expected_delivery, coupon_code, coupon_discount
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        expected_delivery, coupon_code, coupon_discount,
+        customer_email, utm_source, utm_medium, utm_campaign, utm_content, utm_term, gclid, fbclid
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
-        orderId, req.user.id, initialStatus,
+        orderId, userId, initialStatus,
         subtotal, Number(discount) + couponDiscount, delivery_fee, tax, totalAmount,
         payment_method, initialPaymentStatus,
         address.name, address.phone, address.line1,
         address.city, address.state, address.pincode,
         expectedDelivery, couponCode || null, couponDiscount,
+        customerEmail,
+        utm?.utm_source || null,
+        utm?.utm_medium || null,
+        utm?.utm_campaign || null,
+        utm?.utm_content || null,
+        utm?.utm_term || null,
+        utm?.gclid || null,
+        utm?.fbclid || null
       ]
     );
+
     if (couponCode) {
       await client.query(
         'UPDATE coupons SET current_uses = current_uses + 1 WHERE UPPER(code) = $1',
@@ -114,8 +139,96 @@ const placeOrder = async (req, res) => {
 
     await client.query('COMMIT');
 
+    // ── Post-Commit Notifications (Task 2.2) ──────────────────────────
+    // Notifications never break the order; errors are logged to notification_log
+    const orderItemsSummary = items.map(i => ({ name: i.name || 'Product', qty: i.quantity, price: i.price }));
+    const formattedAddress = `${address.name} (${address.phone}), ${address.line1}, ${address.city}, ${address.state} - ${address.pincode}`;
+
+    // 1. Customer confirmation email
+    if (customerEmail) {
+      (async () => {
+        try {
+          const { sendEmail } = require('../utils/email.service');
+          await sendEmail({
+            type: 'order_confirmation',
+            to: customerEmail,
+            data: {
+              name: address.name || 'Valued Customer',
+              orderId,
+              items: orderItemsSummary,
+              total: totalAmount,
+              address: formattedAddress
+            }
+          });
+          await query('INSERT INTO notification_log (order_id, channel, status) VALUES ($1, $2, $3)', [orderId, 'email_customer', 'sent']);
+        } catch (emailErr) {
+          console.error('Customer email notification error:', emailErr.message);
+          await query('INSERT INTO notification_log (order_id, channel, status, error) VALUES ($1, $2, $3, $4)', [orderId, 'email_customer', 'failed', emailErr.message]).catch(() => {});
+        }
+      })();
+    }
+
+    // 2. Admin notification email
+    (async () => {
+      try {
+        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SUPPORT_EMAIL || 'support@yogkart.com';
+        const { sendEmail } = require('../utils/email.service');
+        await sendEmail({
+          type: 'order_confirmation',
+          to: adminEmail,
+          data: {
+            name: 'YogKart Admin',
+            orderId: `${orderId} [NEW ORDER]`,
+            items: orderItemsSummary,
+            total: totalAmount,
+            address: formattedAddress
+          }
+        });
+        await query('INSERT INTO notification_log (order_id, channel, status) VALUES ($1, $2, $3)', [orderId, 'email_admin', 'sent']);
+      } catch (adminErr) {
+        console.error('Admin order notification error:', adminErr.message);
+        await query('INSERT INTO notification_log (order_id, channel, status, error) VALUES ($1, $2, $3, $4)', [orderId, 'email_admin', 'failed', adminErr.message]).catch(() => {});
+      }
+    })();
+
+    // 3. Optional Meta Conversions API (Task 2.5)
+    if (process.env.META_PIXEL_ID && process.env.META_CONVERSIONS_API_TOKEN) {
+      (async () => {
+        try {
+          const crypto = require('crypto');
+          const hash = val => crypto.createHash('sha256').update(String(val).trim().toLowerCase()).digest('hex');
+          const userData = {};
+          if (customerEmail) userData.em = [hash(customerEmail)];
+          if (customerPhone) userData.ph = [hash(customerPhone.replace(/\D/g, ''))];
+
+          const payload = {
+            data: [{
+              event_name: 'Purchase',
+              event_time: Math.floor(Date.now() / 1000),
+              event_id: orderId,
+              action_source: 'website',
+              user_data: userData,
+              custom_data: {
+                currency: 'INR',
+                value: totalAmount,
+                order_id: orderId
+              }
+            }]
+          };
+
+          await fetch(`https://graph.facebook.com/v19.0/${process.env.META_PIXEL_ID}/events?access_token=${process.env.META_CONVERSIONS_API_TOKEN}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } catch (metaErr) {
+          console.error('Meta CAPI error:', metaErr.message);
+        }
+      })();
+    }
+
     // Return full order
-    const order = await getOrderById(orderId, req.user.id);
+    const order = await getOrderById(orderId, userId);
     return created(res, { order }, 'Order placed successfully');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -278,8 +391,26 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-// ── Helper ─────────────────────────────────────────────
-const getOrderById = async (orderId, userId) => {
+// ── Tracking & Helpers (Task 2.1) ──────────────────────
+const trackOrder = async (req, res) => {
+  try {
+    const { id, phone } = req.query;
+    if (!id || !phone) {
+      return error(res, 'Both Order ID and Phone Number are required for tracking', 400);
+    }
+    const order = await getOrderByIdAndPhone(String(id).trim(), String(phone).trim());
+    if (!order) {
+      return notFound(res, 'No matching order found for this Order ID and Phone Number');
+    }
+    return success(res, { order });
+  } catch (err) {
+    console.error('trackOrder error:', err);
+    return error(res, 'Failed to track order');
+  }
+};
+
+const getOrderByIdAndPhone = async (orderId, phone) => {
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
   const result = await query(
     `SELECT o.*,
       COALESCE(
@@ -294,9 +425,10 @@ const getOrderById = async (orderId, userId) => {
       ) AS items
      FROM orders o
      LEFT JOIN order_items oi ON oi.order_id = o.id
-     WHERE o.id = $1 AND o.user_id = $2
+     WHERE UPPER(o.id) = UPPER($1) 
+       AND (o.address_phone ILIKE $2 OR o.address_phone ILIKE $3)
      GROUP BY o.id`,
-    [orderId, userId]
+    [orderId, `%${cleanPhone}`, `%${phone}%`]
   );
   if (!result.rows.length) return null;
   const order = result.rows[0];
@@ -320,4 +452,47 @@ const getOrderById = async (orderId, userId) => {
   };
 };
 
-module.exports = { placeOrder, getOrders, getOrder, cancelOrder, downloadInvoice };
+const getOrderById = async (orderId, userId = null) => {
+  const where = userId ? 'WHERE o.id = $1 AND o.user_id = $2' : 'WHERE o.id = $1';
+  const params = userId ? [orderId, userId] : [orderId];
+  const result = await query(
+    `SELECT o.*,
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
+            'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
+            'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
+          )
+        ) FILTER (WHERE oi.id IS NOT NULL),
+        '[]'::json
+      ) AS items
+     FROM orders o
+     LEFT JOIN order_items oi ON oi.order_id = o.id
+     ${where}
+     GROUP BY o.id`,
+    params
+  );
+  if (!result.rows.length) return null;
+  const order = result.rows[0];
+  return {
+    ...order,
+    address: {
+      name: order.address_name || '',
+      phone: order.address_phone || '',
+      line1: order.address_line1 || '',
+      city: order.address_city || '',
+      state: order.address_state || '',
+      pincode: order.address_pincode || '',
+    },
+    items: (order.items ?? [])
+      .filter(item => item && (item.id !== null || item.product_id !== null))
+      .map(item => ({
+        ...item,
+        product_name: item.name,
+        image: item.thumbnail,
+      }))
+  };
+};
+
+module.exports = { placeOrder, getOrders, getOrder, cancelOrder, downloadInvoice, trackOrder };

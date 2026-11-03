@@ -5,12 +5,13 @@ const { BESTSELLER_JOIN, BADGE_SELECT_EXPRESSION } = require('../services/badge.
 
 // Product fields to always select
 const PRODUCT_FIELDS = `
-  p.id, p.name, p.slug, p.category_id AS category, p.subcategory, p.brand,
+  p.id, p.name, p.slug, p.category_id AS category, c.name AS category_name, p.subcategory, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description, p.key_benefits,
   p.ingredients, p.dosage, p.side_effects,
   p.is_featured,
-  (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+  (CASE WHEN (p.is_active = TRUE AND p.created_at >= (NOW() - INTERVAL '30 days')) THEN TRUE ELSE FALSE END) AS is_new,
+  p.show_on_home, p.home_order,
   (CASE WHEN cb.product_id IS NOT NULL THEN TRUE ELSE FALSE END) AS is_best_seller,
   p.tags,
   p.prescription, p.manufacturer, p.country_of_origin, p.pack_size,
@@ -24,11 +25,12 @@ const PRODUCT_FIELDS = `
 `;
 
 const FALLBACK_PRODUCT_FIELDS = `
-  p.id, p.name, p.slug, p.category_id AS category, p.brand,
+  p.id, p.name, p.slug, p.category_id AS category, c.name AS category_name, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description,
   p.is_featured,
-  (CASE WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN TRUE ELSE FALSE END) AS is_new,
+  (CASE WHEN (p.is_active = TRUE AND p.created_at >= (NOW() - INTERVAL '30 days')) THEN TRUE ELSE FALSE END) AS is_new,
+  p.show_on_home, p.home_order,
   (CASE WHEN cb.product_id IS NOT NULL THEN TRUE ELSE FALSE END) AS is_best_seller,
   p.tags,
   p.created_at, p.updated_at,
@@ -461,196 +463,39 @@ const getBestSellers = async (req, res) => {
 };
 
 // ── GET /api/products/homepage ─────────────────────────
-// Global deduplication across Featured -> Trending -> Limited Time Deals
+// Curation via show_on_home = true and home_order ASC (Task 2.9)
 const getHomepageProducts = async (req, res) => {
   try {
-    const limit = Math.max(1, parseInt(req.query.limit) || 5);
-    const DisplayedProductIds = new Set();
+    const limit = Math.max(1, parseInt(req.query.limit) || 8);
 
-    // ──────────────────────────────────────────────────
-    // 1. FEATURED PRODUCTS (Priority 1)
-    // ──────────────────────────────────────────────────
-    let featured = [];
-    try {
-      const featRes = await query(
-        `SELECT ${PRODUCT_FIELDS}
-         FROM products p
-         ${ACTIVE_CATEGORY_JOIN}
-         ${BESTSELLER_JOIN}
-         WHERE p.is_featured = TRUE 
-           AND p.is_active = TRUE 
-           AND (p.stock > 0 OR p.stock IS NULL)
-           AND ${ACTIVE_CATEGORY_CONDITION} 
-           AND ${PUBLIC_CATEGORY_CONDITION}
-         ORDER BY p.review_count DESC, p.rating DESC, p.created_at DESC
-         LIMIT $1`,
-        [limit * 3]
-      );
+    const curatedRes = await query(
+      `SELECT ${PRODUCT_FIELDS}
+       FROM products p
+       ${ACTIVE_CATEGORY_JOIN}
+       ${BESTSELLER_JOIN}
+       WHERE p.is_active = TRUE
+         AND p.show_on_home = TRUE
+         AND (p.stock > 0 OR p.stock IS NULL)
+         AND ${ACTIVE_CATEGORY_CONDITION}
+         AND ${PUBLIC_CATEGORY_CONDITION}
+       ORDER BY p.home_order ASC, p.name ASC`
+    );
 
-      for (const prod of featRes.rows) {
-        if (!DisplayedProductIds.has(prod.id)) {
-          featured.push(prod);
-          DisplayedProductIds.add(prod.id);
-          if (featured.length >= limit) break;
-        }
-      }
-
-      // If less than limit, fetch additional eligible products
-      if (featured.length < limit) {
-        const excludeIds = Array.from(DisplayedProductIds);
-        const featFillRes = await query(
-          `SELECT ${PRODUCT_FIELDS}
-           FROM products p
-           ${ACTIVE_CATEGORY_JOIN}
-           ${BESTSELLER_JOIN}
-           WHERE p.is_active = TRUE 
-             AND (p.stock > 0 OR p.stock IS NULL)
-             AND ${ACTIVE_CATEGORY_CONDITION} 
-             AND ${PUBLIC_CATEGORY_CONDITION}
-             ${excludeIds.length > 0 ? `AND p.id != ALL($1::int[])` : ''}
-           ORDER BY p.is_featured DESC, p.review_count DESC, p.rating DESC, p.created_at DESC
-           LIMIT $${excludeIds.length > 0 ? '2' : '1'}`,
-          excludeIds.length > 0 ? [excludeIds, limit - featured.length] : [limit - featured.length]
-        );
-        for (const prod of featFillRes.rows) {
-          if (!DisplayedProductIds.has(prod.id)) {
-            featured.push(prod);
-            DisplayedProductIds.add(prod.id);
-            if (featured.length >= limit) break;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('getHomepageProducts featured query fallback:', e.message);
-    }
-
-    // ──────────────────────────────────────────────────
-    // 2. TRENDING PRODUCTS (Priority 2)
-    // ──────────────────────────────────────────────────
-    let trending = [];
-    try {
-      const excludeIds = Array.from(DisplayedProductIds);
-      const trendRes = await query(
-        `SELECT ${PRODUCT_FIELDS}
-         FROM products p
-         ${ACTIVE_CATEGORY_JOIN}
-         ${BESTSELLER_JOIN}
-         WHERE p.is_active = TRUE 
-           AND (p.stock > 0 OR p.stock IS NULL)
-           AND ${ACTIVE_CATEGORY_CONDITION} 
-           AND ${PUBLIC_CATEGORY_CONDITION}
-           ${excludeIds.length > 0 ? `AND p.id != ALL($1::int[])` : ''}
-         ORDER BY cb.total_orders DESC NULLS LAST, p.review_count DESC, p.rating DESC, p.created_at DESC
-         LIMIT $${excludeIds.length > 0 ? '2' : '1'}`,
-        excludeIds.length > 0 ? [excludeIds, limit * 3] : [limit * 3]
-      );
-
-      for (const prod of trendRes.rows) {
-        if (!DisplayedProductIds.has(prod.id)) {
-          trending.push(prod);
-          DisplayedProductIds.add(prod.id);
-          if (trending.length >= limit) break;
-        }
-      }
-
-      // If trending is still short of limit, backfill with eligible active products
-      if (trending.length < limit) {
-        const trendExclude = Array.from(DisplayedProductIds);
-        const trendFillRes = await query(
-          `SELECT ${PRODUCT_FIELDS}
-           FROM products p
-           ${ACTIVE_CATEGORY_JOIN}
-           ${BESTSELLER_JOIN}
-           WHERE p.is_active = TRUE 
-             AND (p.stock > 0 OR p.stock IS NULL)
-             AND ${ACTIVE_CATEGORY_CONDITION} 
-             AND ${PUBLIC_CATEGORY_CONDITION}
-             ${trendExclude.length > 0 ? `AND p.id != ALL($1::int[])` : ''}
-           ORDER BY p.rating DESC, p.review_count DESC, p.created_at DESC
-           LIMIT $${trendExclude.length > 0 ? '2' : '1'}`,
-          trendExclude.length > 0 ? [trendExclude, limit - trending.length] : [limit - trending.length]
-        );
-        for (const prod of trendFillRes.rows) {
-          if (!DisplayedProductIds.has(prod.id)) {
-            trending.push(prod);
-            DisplayedProductIds.add(prod.id);
-            if (trending.length >= limit) break;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('getHomepageProducts trending query fallback:', e.message);
-    }
-
-    // ──────────────────────────────────────────────────
-    // 3. LIMITED TIME DEALS (Priority 3)
-    // ──────────────────────────────────────────────────
-    let deals = [];
-    try {
-      const excludeIds = Array.from(DisplayedProductIds);
-      const dealsRes = await query(
-        `SELECT ${PRODUCT_FIELDS}
-         FROM products p
-         ${ACTIVE_CATEGORY_JOIN}
-         ${BESTSELLER_JOIN}
-         WHERE p.is_active = TRUE 
-           AND (p.stock > 0 OR p.stock IS NULL)
-           AND ${ACTIVE_CATEGORY_CONDITION} 
-           AND ${PUBLIC_CATEGORY_CONDITION}
-           AND (
-             COALESCE(p.discount, 0) > 0 
-             OR (COALESCE(p.original_price, 0) > COALESCE(p.price, 0))
-           )
-           ${excludeIds.length > 0 ? `AND p.id != ALL($1::int[])` : ''}
-         ORDER BY 
-           (CASE WHEN COALESCE(p.original_price, 0) > COALESCE(p.price, 0)
-                 THEN ((p.original_price - p.price) / NULLIF(p.original_price, 0) * 100)
-                 ELSE COALESCE(p.discount, 0) END) DESC,
-           p.rating DESC
-         LIMIT $${excludeIds.length > 0 ? '2' : '1'}`,
-        excludeIds.length > 0 ? [excludeIds, limit * 3] : [limit * 3]
-      );
-
-      for (const prod of dealsRes.rows) {
-        if (!DisplayedProductIds.has(prod.id)) {
-          deals.push(prod);
-          DisplayedProductIds.add(prod.id);
-          if (deals.length >= limit) break;
-        }
-      }
-
-      // If deals is still short of limit, backfill with best available active products
-      if (deals.length < limit) {
-        const dealsExclude = Array.from(DisplayedProductIds);
-        const dealsFillRes = await query(
-          `SELECT ${PRODUCT_FIELDS}
-           FROM products p
-           ${ACTIVE_CATEGORY_JOIN}
-           ${BESTSELLER_JOIN}
-           WHERE p.is_active = TRUE 
-             AND (p.stock > 0 OR p.stock IS NULL)
-             AND ${ACTIVE_CATEGORY_CONDITION} 
-             AND ${PUBLIC_CATEGORY_CONDITION}
-             ${dealsExclude.length > 0 ? `AND p.id != ALL($1::int[])` : ''}
-           ORDER BY p.price ASC, p.rating DESC
-           LIMIT $${dealsExclude.length > 0 ? '2' : '1'}`,
-          dealsExclude.length > 0 ? [dealsExclude, limit - deals.length] : [limit - deals.length]
-        );
-        for (const prod of dealsFillRes.rows) {
-          if (!DisplayedProductIds.has(prod.id)) {
-            deals.push(prod);
-            DisplayedProductIds.add(prod.id);
-            if (deals.length >= limit) break;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('getHomepageProducts deals query fallback:', e.message);
-    }
+    const allCurated = curatedRes.rows;
+    const featured = allCurated.slice(0, limit);
+    const trending = allCurated.slice(0, limit);
+    const deals = allCurated.filter(p => {
+      const disc = Number(p.discount || 0);
+      const orig = Number(p.original_price || 0);
+      const pr = Number(p.price || 0);
+      const calcDisc = orig > pr ? Math.round(((orig - pr) / orig) * 100) : 0;
+      return disc >= 10 || calcDisc >= 10;
+    }).slice(0, limit);
 
     return success(res, {
       featured,
       trending,
+      ourPicks: trending,
       deals
     });
   } catch (err) {
@@ -866,6 +711,51 @@ const addProductReview = async (req, res) => {
   }
 };
 
+// ── GET /api/products/reviews/summary (Task 1.1) ───────────
+const getReviewsSummary = async (req, res) => {
+  try {
+    const statsRes = await query(`
+      SELECT 
+        COUNT(*)::int AS total_reviews, 
+        COALESCE(AVG(rating)::numeric(3,1), 0) AS average_rating
+      FROM product_reviews
+      WHERE is_approved = TRUE AND is_verified_buyer = TRUE;
+    `);
+    const totalReviews = statsRes.rows[0]?.total_reviews || 0;
+    const averageRating = parseFloat(statsRes.rows[0]?.average_rating || 0);
+    return success(res, {
+      totalReviews,
+      averageRating,
+      eligibleForDisplay: totalReviews >= 10
+    });
+  } catch (err) {
+    console.error('getReviewsSummary error:', err);
+    return error(res, 'Failed to fetch review summary');
+  }
+};
+
+// ── GET /api/products/reviews/testimonials (Task 1.2) ─────
+const getFeaturedTestimonials = async (req, res) => {
+  try {
+    const testRes = await query(`
+      SELECT pr.id, pr.rating, pr.title, pr.comment AS text, pr.user_name AS name,
+             pr.created_at, p.name AS product, p.slug AS product_slug
+      FROM product_reviews pr
+      JOIN products p ON p.id = pr.product_id
+      WHERE pr.is_approved = TRUE AND pr.is_verified_buyer = TRUE
+      ORDER BY pr.rating DESC, pr.created_at DESC
+      LIMIT 6;
+    `);
+    return success(res, {
+      reviews: testRes.rows,
+      eligibleForDisplay: testRes.rows.length >= 3
+    });
+  } catch (err) {
+    console.error('getFeaturedTestimonials error:', err);
+    return error(res, 'Failed to fetch testimonials');
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -877,5 +767,7 @@ module.exports = {
   getBanners,
   getProductVariations,
   getProductReviews,
-  addProductReview
+  addProductReview,
+  getReviewsSummary,
+  getFeaturedTestimonials
 };

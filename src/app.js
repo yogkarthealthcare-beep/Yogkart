@@ -175,6 +175,7 @@ app.get('/sitemap-:locale.xml', seoController.localeSitemap);
 app.get('/image-sitemap.xml', seoController.imageSitemap);
 app.get('/video-sitemap.xml', seoController.videoSitemap);
 app.get('/robots.txt', seoController.robots);
+app.get('/feeds/google-merchant.xml', seoController.googleMerchantFeed);
 app.get('/llms.txt', seoController.llmsTxt);
 app.get('/llms-full.txt', seoController.llmsTxt);
 app.get('/share/products/:slug', socialShareController.getSocialPreview);

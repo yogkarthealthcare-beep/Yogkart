@@ -1,56 +1,39 @@
 /**
  * Automatic Badge Calculation Service
  * 
- * Rules & Priority:
- * 1. NEW (Priority Score 100): Product created within the last 6 months (created_at >= NOW() - INTERVAL '6 months').
- * 2. BEST SELLER (Priority Score 80): Product has total orders > 0 and the highest orders in its category.
- * 3. DISCOUNT (Priority Score 60): Product has actual discount > 20%.
+ * Rules & Priority (Task 1.5):
+ * 1. BEST SELLER (Priority Score 100): Product has at least 5 non-cancelled, delivered order items in the last 90 days.
+ * 2. NEW (Priority Score 80): Product created within the last 30 days and is_active = true.
+ * 3. DISCOUNT (Priority Score 60): Product has actual discount >= 10%.
  * 4. NULL (NO BADGE, Score 0): None of the above.
  * 
- * Exactly ONE badge per product.
- * NEW > BEST SELLER > DISCOUNT
+ * Exactly ONE badge per product maximum.
+ * BEST SELLER > NEW > DISCOUNT
  */
 
 const BESTSELLER_JOIN = `
   LEFT JOIN (
-    WITH product_orders AS (
-      SELECT 
-        oi.product_id,
-        COUNT(DISTINCT oi.order_id)::int AS total_orders
-      FROM order_items oi
-      JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
-      GROUP BY oi.product_id
-    ),
-    ranked AS (
-      SELECT 
-        p.id AS product_id,
-        p.category_id,
-        COALESCE(po.total_orders, 0) AS total_orders,
-        ROW_NUMBER() OVER (
-          PARTITION BY p.category_id 
-          ORDER BY COALESCE(po.total_orders, 0) DESC, p.review_count DESC, p.id ASC
-        ) AS rank
-      FROM products p
-      JOIN product_orders po ON po.product_id = p.id
-      WHERE p.is_active = TRUE
-        AND p.category_id IS NOT NULL
-        AND po.total_orders > 0
-    )
-    SELECT product_id, category_id, total_orders
-    FROM ranked
-    WHERE rank = 1
+    SELECT 
+      oi.product_id,
+      COUNT(oi.id)::int AS total_delivered_items
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id 
+      AND o.status = 'delivered' 
+      AND o.created_at >= (NOW() - INTERVAL '90 days')
+    GROUP BY oi.product_id
+    HAVING COUNT(oi.id) >= 5
   ) cb ON cb.product_id = p.id
 `;
 
 const BADGE_SELECT_EXPRESSION = `
   CASE
-    WHEN p.created_at >= (NOW() - INTERVAL '6 months') THEN 'NEW'
     WHEN cb.product_id IS NOT NULL THEN 'BESTSELLER'
+    WHEN (p.is_active = TRUE AND p.created_at >= (NOW() - INTERVAL '30 days')) THEN 'NEW'
     WHEN (
-      COALESCE(p.discount, 0) > 20 
+      COALESCE(p.discount, 0) >= 10 
       OR (
         COALESCE(p.original_price, 0) > COALESCE(p.price, 0) 
-        AND ((p.original_price - p.price) / NULLIF(p.original_price, 0) * 100) > 20
+        AND ((p.original_price - p.price) / NULLIF(p.original_price, 0) * 100) >= 10
       )
     ) THEN 'BEST DISCOUNT'
     ELSE NULL
@@ -59,40 +42,35 @@ const BADGE_SELECT_EXPRESSION = `
 
 /**
  * Pure JS fallback/normalization helper
- * Priority: NEW (100) > BEST SELLER (80) > DISCOUNT (60) > NONE (0)
+ * Priority: BEST SELLER (100) > NEW (80) > DISCOUNT (60) > NONE (0)
  */
 function computeProductBadge(product, bestsellerProductIds = new Set()) {
   if (!product) return null;
 
-  // Condition 1: NEW Eligibility (Created within last 6 months)
+  // Condition 1: BESTSELLER Eligibility (At least 5 delivered items in 90 days)
+  const isBestseller = Boolean(bestsellerProductIds && bestsellerProductIds.has(product.id));
+
+  // Condition 2: NEW Eligibility (Active and created within last 30 days)
   const createdAt = product.created_at || product.createdAt ? new Date(product.created_at || product.createdAt) : null;
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const isNew = Boolean(createdAt && !isNaN(createdAt.getTime()) && createdAt >= sixMonthsAgo);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const isNew = Boolean(product.is_active && createdAt && !isNaN(createdAt.getTime()) && createdAt >= thirtyDaysAgo);
 
-  // Condition 2: BESTSELLER Eligibility
-  const isBestseller = Boolean(
-    (bestsellerProductIds && bestsellerProductIds.has(product.id)) ||
-    product.is_best_seller ||
-    product.isBestSeller ||
-    product.is_best_seller_calculated
-  );
-
-  // Condition 3: DISCOUNT Eligibility (> 20%)
+  // Condition 3: DISCOUNT Eligibility (>= 10%)
   const originalPrice = parseFloat(product.original_price || product.originalPrice || 0);
   const price = parseFloat(product.price || 0);
   const discount = Number(product.discount || 0);
   const calculatedDiscount = originalPrice > price 
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : 0;
-  const isDiscount = discount > 20 || calculatedDiscount > 20;
+  const isDiscount = discount >= 10 || calculatedDiscount >= 10;
 
-  // Apply Priority Order: NEW > BEST SELLER > DISCOUNT
-  if (isNew) {
-    return 'NEW';
-  }
+  // Apply Priority Order: BEST SELLER > NEW > DISCOUNT
   if (isBestseller) {
     return 'BESTSELLER';
+  }
+  if (isNew) {
+    return 'NEW';
   }
   if (isDiscount) {
     return 'BEST DISCOUNT';

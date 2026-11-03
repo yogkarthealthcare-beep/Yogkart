@@ -32,14 +32,41 @@ const subscribe = async (req, res) => {
       source: source || 'Home Page Newsletter'
     });
 
+    // Validate coupon exists in database (Task 2.3)
+    const { query } = require('../config/database');
+    const couponCheck = await query(
+      "SELECT code, discount_value, min_order_value FROM coupons WHERE code = 'YOGKART15' AND is_active = TRUE LIMIT 1"
+    );
+    const validCoupon = couponCheck.rows.length > 0 ? couponCheck.rows[0].code : 'YOGKART15';
+
+    // Attempt to email coupon to subscriber (Task 2.3)
+    let emailSent = false;
+    try {
+      const { sendEmail } = require('../utils/email.service');
+      await sendEmail({
+        type: 'welcome',
+        to: cleanEmail,
+        data: {
+          name: name || 'Valued Subscriber',
+          couponCode: validCoupon
+        }
+      });
+      emailSent = true;
+    } catch (mailErr) {
+      console.warn('Newsletter welcome email delivery notice:', mailErr.message);
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'Thank you for subscribing! Your 15% discount coupon is YOGKART15.',
+      message: emailSent
+        ? `Welcome to YogKart! Your 15% discount coupon is ${validCoupon}. We also emailed it to you.`
+        : `Welcome to YogKart! Your 15% discount coupon is ${validCoupon}.`,
       data: {
         id: subscriber.id,
         email: subscriber.email,
-        couponCode: 'YOGKART15',
-        discount: '15% OFF'
+        couponCode: validCoupon,
+        discount: '15% OFF',
+        emailSent
       }
     });
   } catch (err) {

@@ -386,6 +386,57 @@ const getPageSeo = async (req, res) => {
   }
 };
 
+// ── Google Merchant Center Product Feed (Task 2.6) ────────────────────────
+const googleMerchantFeed = async (_req, res) => {
+  try {
+    const { rows: products } = await db.query(`
+      SELECT p.id, p.name, p.slug, p.description, p.short_description, p.price, p.stock,
+             p.thumbnail, p.images, p.brand, c.name AS category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE p.is_active = TRUE AND (p.stock > 0 OR p.stock IS NULL)
+      ORDER BY p.id ASC
+    `);
+
+    const itemsXml = products.map(p => {
+      const img = p.thumbnail || (p.images && p.images[0]) || '';
+      const desc = escapeXml((p.short_description || p.description || p.name).slice(0, 500));
+      const title = escapeXml(p.name);
+      const link = escapeXml(`https://yogkart.com/products/${p.slug}`);
+      const priceStr = `${Number(p.price).toFixed(2)} INR`;
+      return `    <item>
+      <g:id>${p.id}</g:id>
+      <g:title>${title}</g:title>
+      <g:description>${desc}</g:description>
+      <g:link>${link}</g:link>
+      <g:image_link>${escapeXml(img)}</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>${priceStr}</g:price>
+      <g:brand>YogKart</g:brand>
+      <g:condition>new</g:condition>
+      ${p.category_name ? `<g:product_type>${escapeXml(p.category_name)}</g:product_type>` : ''}
+    </item>`;
+    }).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>YogKart Natural &amp; Herbal Store</title>
+    <link>https://yogkart.com</link>
+    <description>Authentic natural personal care, neem wood combs, herbal soaps &amp; eco-friendly essentials</description>
+${itemsXml}
+  </channel>
+</rss>`;
+
+    res.set('Content-Type', 'application/xml');
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.status(200).send(xml);
+  } catch (err) {
+    console.error('googleMerchantFeed error:', err);
+    return res.status(500).send('<error>Failed to generate feed</error>');
+  }
+};
+
 module.exports = {
   sitemapIndex,
   localeSitemap,
@@ -394,5 +445,6 @@ module.exports = {
   videoSitemap,
   robots,
   llmsTxt,
-  getPageSeo
+  getPageSeo,
+  googleMerchantFeed
 };
