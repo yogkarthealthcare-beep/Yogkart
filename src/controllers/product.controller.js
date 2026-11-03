@@ -355,7 +355,14 @@ const getRelated = async (req, res) => {
 const getCategories = async (req, res) => {
   try {
     const result = await query(
-      `SELECT c.*, COUNT(p.id)::int AS count
+      `SELECT c.*, 
+              COALESCE(c.image, c.image_path, (
+                SELECT p2.thumbnail 
+                FROM products p2 
+                WHERE p2.category_id = c.id AND p2.is_active = TRUE AND p2.thumbnail IS NOT NULL AND p2.thumbnail <> '' 
+                ORDER BY p2.created_at DESC LIMIT 1
+              )) AS image,
+              COUNT(p.id)::int AS count
        FROM categories c
        LEFT JOIN products p ON p.category_id = c.id AND p.is_active = TRUE
        WHERE c.is_active = TRUE AND ${PUBLIC_CATEGORY_FIELDS_CONDITION}
