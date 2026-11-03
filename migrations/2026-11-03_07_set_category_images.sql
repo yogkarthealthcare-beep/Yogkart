@@ -46,3 +46,4 @@ SET image = 'https://res.cloudinary.com/dnl8ik1o7/image/upload/v1780731422/074ea
 WHERE id = 'bamboo-products';
 
 COMMIT;
+

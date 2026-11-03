@@ -15,9 +15,36 @@ exports.getPublicNavigations = async (req, res) => {
   try {
     const menus = await NavigationModel.getAllNavigations(false);
     const tree = buildTree(menus, null);
-    res.json({ success: true, data: tree });
+    const config = await NavigationModel.getMenuBarConfig();
+    res.json({
+      success: true,
+      data: {
+        is_menu_bar_active: config.is_active !== false,
+        items: tree
+      }
+    });
   } catch (error) {
     console.error('Error fetching public navigation:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+exports.getMenuBarSettings = async (req, res) => {
+  try {
+    const config = await NavigationModel.getMenuBarConfig();
+    res.json({ success: true, data: config });
+  } catch (error) {
+    console.error('Error getting menu bar settings:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+exports.updateMenuBarSettings = async (req, res) => {
+  try {
+    const updated = await NavigationModel.updateMenuBarConfig(req.body);
+    res.json({ success: true, data: updated, message: 'Menu bar settings updated successfully' });
+  } catch (error) {
+    console.error('Error updating menu bar settings:', error);
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };

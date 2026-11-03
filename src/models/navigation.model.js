@@ -4,7 +4,7 @@ class NavigationModel {
   static async getAllNavigations(adminOnly = false) {
     const visibleCondition = adminOnly ? '' : 'WHERE is_visible = TRUE AND is_active = TRUE';
     const sql = `
-      SELECT id, label, url, parent_id, menu_type, display_order, is_visible, is_active, open_in_new_tab, icon 
+      SELECT id, label, url, parent_id, menu_type, display_order, is_visible, is_active, open_in_new_tab, icon, badge 
       FROM navigation_menus
       ${visibleCondition}
       ORDER BY parent_id NULLS FIRST, display_order ASC
@@ -21,14 +21,14 @@ class NavigationModel {
 
   static async createNavigation(data) {
     const sql = `
-      INSERT INTO navigation_menus (label, url, parent_id, menu_type, display_order, is_visible, is_active, open_in_new_tab, icon)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO navigation_menus (label, url, parent_id, menu_type, display_order, is_visible, is_active, open_in_new_tab, icon, badge)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const values = [
       data.label, data.url || null, data.parent_id || null, data.menu_type || 'link',
       data.display_order || 0, data.is_visible !== false, data.is_active !== false,
-      data.open_in_new_tab || false, data.icon || null
+      data.open_in_new_tab || false, data.icon || null, data.badge || null
     ];
     const result = await query(sql, values);
     return result.rows[0];
@@ -38,17 +38,35 @@ class NavigationModel {
     const sql = `
       UPDATE navigation_menus 
       SET label = $1, url = $2, parent_id = $3, menu_type = $4, display_order = $5, 
-          is_visible = $6, is_active = $7, open_in_new_tab = $8, icon = $9, updated_at = NOW()
-      WHERE id = $10
+          is_visible = $6, is_active = $7, open_in_new_tab = $8, icon = $9, badge = $10, updated_at = NOW()
+      WHERE id = $11
       RETURNING *
     `;
     const values = [
       data.label, data.url || null, data.parent_id || null, data.menu_type || 'link',
       data.display_order || 0, data.is_visible !== false, data.is_active !== false,
-      data.open_in_new_tab || false, data.icon || null, id
+      data.open_in_new_tab || false, data.icon || null, data.badge || null, id
     ];
     const result = await query(sql, values);
     return result.rows[0];
+  }
+
+  static async getMenuBarConfig() {
+    const sql = `SELECT setting_value FROM site_settings WHERE setting_key = 'menu_bar'`;
+    const res = await query(sql);
+    return res.rows[0]?.setting_value || { is_active: true };
+  }
+
+  static async updateMenuBarConfig(config) {
+    const sql = `
+      INSERT INTO site_settings (setting_key, setting_value, description)
+      VALUES ('menu_bar', $1, 'Master toggle and display settings for header navigation menu bar')
+      ON CONFLICT (setting_key) DO UPDATE
+      SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+      RETURNING setting_value
+    `;
+    const res = await query(sql, [JSON.stringify(config)]);
+    return res.rows[0]?.setting_value;
   }
 
   static async deleteNavigation(id) {
