@@ -135,6 +135,16 @@ const createProduct = async (req, res) => {
     };
     const seo = await finalizeSeo(product, req.body, null, req.body.use_ai_seo !== false);
 
+    let finalDiscount = Number(discount || 0);
+    const numPrice = Number(price);
+    const numOriginalPrice = Number(original_price);
+    if (numOriginalPrice > 0 && numPrice > 0 && numPrice <= numOriginalPrice) {
+      const calculatedDiscount = Math.round(((numOriginalPrice - numPrice) / numOriginalPrice) * 100);
+      if (finalDiscount <= 0 || (finalDiscount >= 95 && calculatedDiscount < 80)) {
+        finalDiscount = calculatedDiscount;
+      }
+    }
+
     const result = await query(
       `INSERT INTO products (
         name, slug, category_id, subcategory, brand, price, original_price,
@@ -153,7 +163,7 @@ const createProduct = async (req, res) => {
       ) RETURNING *`,
       [
         name, seo.slug, categoryId, subcategory || null, brand,
-        Number(price), Number(original_price), Number(discount), Number(stock),
+        Number(price), Number(original_price), finalDiscount, Number(stock),
         images, thumbnail || null, description || null, benefits,
         ingredients || null, dosage || null, side_effects || null,
         Boolean(is_featured), false, false,
@@ -210,6 +220,16 @@ const updateProduct = async (req, res) => {
       req.body.use_ai_seo !== false
     );
 
+    let finalDiscount = Number(merged.discount !== undefined ? merged.discount : existing.discount || 0);
+    const numPrice = Number(merged.price);
+    const numOriginalPrice = Number(merged.original_price);
+    if (numOriginalPrice > 0 && numPrice > 0 && numPrice <= numOriginalPrice) {
+      const calculatedDiscount = Math.round(((numOriginalPrice - numPrice) / numOriginalPrice) * 100);
+      if (finalDiscount <= 0 || (finalDiscount >= 95 && calculatedDiscount < 80)) {
+        finalDiscount = calculatedDiscount;
+      }
+    }
+
     const fields = {
       name: merged.name,
       slug: seo.slug,
@@ -218,7 +238,7 @@ const updateProduct = async (req, res) => {
       brand: merged.brand,
       price: Number(merged.price),
       original_price: Number(merged.original_price),
-      discount: Number(merged.discount || 0),
+      discount: finalDiscount,
       stock: Number(merged.stock || 0),
       images: merged.images,
       thumbnail: merged.thumbnail || null,
