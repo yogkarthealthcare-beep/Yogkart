@@ -135,19 +135,92 @@ const getProducts = async (req, res) => {
       conditions.push("cb.product_id IS NOT NULL AND p.created_at < (NOW() - INTERVAL '6 months')");
     }
 
-    // Full text search
+    // ── Smart & Fast Multi-Field Search (Name, Brand, Category, Tags, Price) ──
     let searchRank = '';
-    if (search && search.trim()) {
-      const tsQuery = search.trim().split(/\s+/).join(' & ');
-      conditions.push(`(
-        p.search_vector @@ to_tsquery('english', $${paramIdx})
-        OR p.name ILIKE $${paramIdx + 1}
-        OR p.brand ILIKE $${paramIdx + 1}
-      )`);
-      params.push(tsQuery);
-      params.push(`%${search.trim()}%`);
-      paramIdx += 2;
-      searchRank = `, ts_rank(p.search_vector, to_tsquery('english', '${tsQuery.replace(/'/g, "''")}')) AS rank`;
+    if (search && String(search).trim()) {
+      const rawSearch = String(search).trim();
+
+      // 1. Detect price intents (e.g. "under 500", "below 300", "above 200", pure number "499")
+      const underMatch = rawSearch.match(/(?:under|below|less than|upto|<=?)\s*₹?\s*(\d+(?:\.\d+)?)/i);
+      const aboveMatch = rawSearch.match(/(?:above|more than|greater than|>=?)\s*₹?\s*(\d+(?:\.\d+)?)/i);
+      const pureNumberMatch = rawSearch.match(/^\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*(?:rs\.?|inr)?\s*$/i);
+      const numberInQuery = rawSearch.match(/(?:₹|rs\.?|price)?\s*(\d+(?:\.\d+)?)/i);
+
+      let priceClause = null;
+      let textToSearch = rawSearch;
+
+      if (underMatch) {
+        const val = parseFloat(underMatch[1]);
+        priceClause = `p.price <= ${val}`;
+        textToSearch = textToSearch.replace(underMatch[0], '').trim();
+      } else if (aboveMatch) {
+        const val = parseFloat(aboveMatch[1]);
+        priceClause = `p.price >= ${val}`;
+        textToSearch = textToSearch.replace(aboveMatch[0], '').trim();
+      } else if (pureNumberMatch) {
+        const val = parseFloat(pureNumberMatch[1]);
+        priceClause = `(
+          p.price = ${val}
+          OR ROUND(p.price) = ${Math.round(val)}
+          OR p.original_price = ${val}
+          OR ROUND(p.original_price) = ${Math.round(val)}
+          OR p.price BETWEEN ${val * 0.85} AND ${val * 1.15}
+        )`;
+        textToSearch = '';
+      } else if (numberInQuery && numberInQuery[1] && parseFloat(numberInQuery[1]) >= 30) {
+        const val = parseFloat(numberInQuery[1]);
+        priceClause = `(
+          p.price = ${val}
+          OR ROUND(p.price) = ${Math.round(val)}
+          OR p.price BETWEEN ${val * 0.85} AND ${val * 1.15}
+        )`;
+        textToSearch = textToSearch.replace(numberInQuery[0], '').trim();
+      }
+
+      // 2. Tokenize text query words
+      const words = textToSearch
+        .replace(/[^\w\s-]/g, ' ')
+        .split(/\s+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 0 && !['and', 'the', 'for', 'with', 'in', 'of', 'to'].includes(w.toLowerCase()));
+
+      const searchClauses = [];
+      if (priceClause) {
+        searchClauses.push(priceClause);
+      }
+
+      if (words.length > 0) {
+        for (const word of words) {
+          const wIdx = paramIdx++;
+          params.push(`%${word}%`);
+          searchClauses.push(`(
+            p.name ILIKE $${wIdx}
+            OR p.brand ILIKE $${wIdx}
+            OR c.name ILIKE $${wIdx}
+            OR p.subcategory ILIKE $${wIdx}
+            OR ARRAY_TO_STRING(p.tags, ' ') ILIKE $${wIdx}
+            OR p.short_description ILIKE $${wIdx}
+          )`);
+        }
+      }
+
+      if (searchClauses.length > 0) {
+        conditions.push(`(${searchClauses.join(' AND ')})`);
+      }
+
+      // 3. Relevance ranking calculation (inlined safe string to keep WHERE/COUNT params aligned)
+      const safeSearch = rawSearch.replace(/'/g, "''");
+      searchRank = `, (
+        CASE
+          WHEN LOWER(p.name) = LOWER('${safeSearch}') THEN 600
+          WHEN p.name ILIKE '${safeSearch}%' THEN 400
+          WHEN p.name ILIKE '%${safeSearch}%' THEN 250
+          WHEN c.name ILIKE '%${safeSearch}%' THEN 150
+          WHEN ARRAY_TO_STRING(p.tags, ' ') ILIKE '%${safeSearch}%' THEN 120
+          WHEN p.brand ILIKE '%${safeSearch}%' THEN 100
+          ELSE 40
+        END + (CASE WHEN p.is_featured THEN 20 ELSE 0 END) + COALESCE(p.review_count, 0)
+      ) AS rank`;
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -195,6 +268,7 @@ const getProducts = async (req, res) => {
         result = await query(
           `SELECT ${FALLBACK_PRODUCT_FIELDS}
            FROM products p
+           ${ACTIVE_CATEGORY_JOIN}
            ${BESTSELLER_JOIN}
            WHERE p.is_active = TRUE
            ORDER BY p.id DESC
