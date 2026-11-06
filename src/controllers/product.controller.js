@@ -5,7 +5,7 @@ const { BESTSELLER_JOIN, BADGE_SELECT_EXPRESSION } = require('../services/badge.
 
 // Product fields to always select
 const PRODUCT_FIELDS = `
-  p.id, p.name, p.slug, p.category_id AS category, c.name AS category_name, p.subcategory, p.brand,
+  p.id, p.name, p.slug, p.is_active, p.category_id AS category, c.name AS category_name, p.subcategory, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description, p.key_benefits,
   p.ingredients, p.dosage, p.side_effects,
@@ -25,7 +25,7 @@ const PRODUCT_FIELDS = `
 `;
 
 const FALLBACK_PRODUCT_FIELDS = `
-  p.id, p.name, p.slug, p.category_id AS category, c.name AS category_name, p.brand,
+  p.id, p.name, p.slug, p.is_active, p.category_id AS category, c.name AS category_name, p.brand,
   p.price, p.original_price, p.discount, p.rating, p.review_count, p.stock,
   p.images, p.thumbnail, p.description,
   p.is_featured,
@@ -97,11 +97,23 @@ const getProducts = async (req, res) => {
       page = 1, limit = 12,
       min_price, max_price, min_rating,
       featured, new: isNew, bestseller,
+      ids,
     } = req.query;
 
     const conditions = ['p.is_active = TRUE', ACTIVE_CATEGORY_CONDITION, PUBLIC_CATEGORY_CONDITION];
     const params = [];
     let paramIdx = 1;
+
+    // Filter by specific product IDs (e.g. for recently viewed products validation)
+    if (ids !== undefined && String(ids).trim()) {
+      const idList = String(ids).split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isInteger(n) && n > 0);
+      if (idList.length > 0) {
+        conditions.push(`p.id = ANY($${paramIdx++}::int[])`);
+        params.push(idList);
+      } else {
+        conditions.push('1 = 0');
+      }
+    }
 
     if (category) {
       conditions.push(`p.category_id = $${paramIdx++}`);
