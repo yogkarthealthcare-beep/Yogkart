@@ -79,7 +79,7 @@ VALUES (
       { "icon": "lock", "title": "Secure Payments", "subtitle": "100% Protected" }
     ],
     "shipping_message": "Free Shipping on orders above ₹499",
-    "return_policy_message": "7-Day hassle-free return or replacement for damaged items",
+    "return_policy_message": "Hassle-free return policy for damaged items",
     "secure_payment_message": "Safe & Encrypted Transactions with UPI, Cards, NetBanking & COD",
     "free_shipping_threshold": 499,
     "delivery_estimate_days": 4,

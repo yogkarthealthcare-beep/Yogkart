@@ -186,7 +186,7 @@ const getSocialImage = async (req, res) => {
         <text x="190" y="478" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">SHOP NOW ➔</text>
 
         <!-- Trust Badges -->
-        <text x="70" y="555" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="500" fill="#6B7280">🚚 Free Shipping ₹499+  •  7-Day Easy Replacement  •  COD Available</text>
+        <text x="70" y="555" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="500" fill="#6B7280">100% Pure &amp; Natural  •  Cash on Delivery Available  •  Yogkart.com</text>
 
         <!-- Product Card Container on Right -->
         <rect x="670" y="65" width="450" height="490" rx="28" fill="#FFFFFF" filter="url(#shadow)"/>
