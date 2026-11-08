@@ -70,14 +70,12 @@ const REGULATED_CATEGORY_TERMS = [
   'superfoods',
   'pharmacy',
   'pharma',
-  'healthcare',
-  'health',
   'diabetes',
   'diabetic',
   'first-aid',
   'medical'
 ];
-const REGULATED_CATEGORY_PATTERN = `(^|[-_\\s&/])(${REGULATED_CATEGORY_TERMS.join('|')})([-_\\s&/]|$)|healthcare`;
+const REGULATED_CATEGORY_PATTERN = `(^|[-_\\s&/])(${REGULATED_CATEGORY_TERMS.join('|')})([-_\\s&/]|$)`;
 const PUBLIC_CATEGORY_CONDITION = `(
   p.category_id IS NULL OR (
     COALESCE(c.id, '') !~* '${REGULATED_CATEGORY_PATTERN}'
