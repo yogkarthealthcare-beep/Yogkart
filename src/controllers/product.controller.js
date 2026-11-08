@@ -169,14 +169,23 @@ const getProducts = async (req, res) => {
         textToSearch = textToSearch.replace(aboveMatch[0], '').trim();
       } else if (pureNumberMatch) {
         const val = parseFloat(pureNumberMatch[1]);
-        priceClause = `(
-          p.price = ${val}
-          OR ROUND(p.price) = ${Math.round(val)}
-          OR p.original_price = ${val}
-          OR ROUND(p.original_price) = ${Math.round(val)}
-          OR p.price BETWEEN ${val * 0.85} AND ${val * 1.15}
-        )`;
-        textToSearch = '';
+        if (val >= 30) {
+          priceClause = `(
+            p.price = ${val}
+            OR ROUND(p.price) = ${Math.round(val)}
+            OR p.original_price = ${val}
+            OR ROUND(p.original_price) = ${Math.round(val)}
+            OR p.price BETWEEN ${val * 0.85} AND ${val * 1.15}
+          )`;
+          textToSearch = '';
+        } else {
+          priceClause = `(
+            p.name ILIKE '%${val}%'
+            OR CAST(ROUND(p.price) AS TEXT) ILIKE '${val}%'
+            OR CAST(ROUND(p.price) AS TEXT) ILIKE '%${val}%'
+          )`;
+          textToSearch = '';
+        }
       } else if (numberInQuery && numberInQuery[1] && parseFloat(numberInQuery[1]) >= 30) {
         const val = parseFloat(numberInQuery[1]);
         priceClause = `(
@@ -210,6 +219,7 @@ const getProducts = async (req, res) => {
             OR p.subcategory ILIKE $${wIdx}
             OR ARRAY_TO_STRING(p.tags, ' ') ILIKE $${wIdx}
             OR p.short_description ILIKE $${wIdx}
+            OR CAST(ROUND(p.price) AS TEXT) ILIKE $${wIdx}
           )`);
         }
       }
@@ -225,6 +235,7 @@ const getProducts = async (req, res) => {
           WHEN LOWER(p.name) = LOWER('${safeSearch}') THEN 600
           WHEN p.name ILIKE '${safeSearch}%' THEN 400
           WHEN p.name ILIKE '%${safeSearch}%' THEN 250
+          WHEN CAST(ROUND(p.price) AS TEXT) ILIKE '${safeSearch}%' THEN 200
           WHEN c.name ILIKE '%${safeSearch}%' THEN 150
           WHEN ARRAY_TO_STRING(p.tags, ' ') ILIKE '%${safeSearch}%' THEN 120
           WHEN p.brand ILIKE '%${safeSearch}%' THEN 100

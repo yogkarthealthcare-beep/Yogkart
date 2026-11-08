@@ -27,7 +27,7 @@ const getWishlist = async (req, res) => {
        ORDER BY w.created_at DESC`,
       [req.user.id]
     );
-    return success(res, { wishlist: result.rows, count: result.rows.length });
+    return success(res, { wishlist: result.rows, count: result.rows.length, items: result.rows });
   } catch (err) {
     return error(res, 'Failed to fetch wishlist');
   }
@@ -37,6 +37,9 @@ const getWishlist = async (req, res) => {
 const toggleWishlist = async (req, res) => {
   try {
     const productId = parseInt(req.params.productId);
+    if (isNaN(productId) || productId <= 0) {
+      return error(res, 'Invalid product ID', 400);
+    }
 
     // Check if already wishlisted
     const existing = await query(
