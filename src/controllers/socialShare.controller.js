@@ -244,8 +244,10 @@ const getSocialImage = async (req, res) => {
       console.warn('Could not write banner cache:', e.message);
     }
 
+    res.removeHeader('Content-Security-Policy');
     res.set({
       'Content-Type': 'image/jpeg',
+      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400',
     });
     return res.send(bannerBuffer);
@@ -283,11 +285,14 @@ const getSocialPreview = async (req, res) => {
     // Preserve any UTM or query parameters passed in the request
     const queryParams = new URLSearchParams(req.query || {});
     const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    // Target product page URL with UTMs intact for human shoppers
     const productUrl = `${SITE_URL}/products/${product.slug}${queryString}`;
-    const canonicalUrl = `${SITE_URL}/products/${product.slug}`;
+    // Canonical link for social crawlers (points to this share route)
+    const shareCanonicalUrl = `${SITE_URL}/p/${product.slug}`;
 
-    // 1200x630 High-Resolution Share Banner URL
+    // 1200x630 High-Resolution Share Banner URL & raw product image fallback
     const shareImageUrl = `https://api.yogkart.com/share/images/${product.slug}.jpg`;
+    const rawProductImg = absoluteUrl(parseImages(product.images, product.thumbnail), DEFAULT_IMAGE);
 
     const price = Number(product.price || 0);
     const originalPrice = Number(product.original_price || 0);
@@ -305,17 +310,17 @@ const getSocialPreview = async (req, res) => {
       '@context': 'https://schema.org',
       '@type': 'Product',
       name: product.name,
-      image: [shareImageUrl, absoluteUrl(parseImages(product.images, product.thumbnail), DEFAULT_IMAGE)],
+      image: [shareImageUrl, rawProductImg],
       description: ogDescription,
       brand: {
         '@type': 'Brand',
         name: compact(product.brand) || 'Yogkart'
       },
       sku: String(product.id),
-      url: canonicalUrl,
+      url: shareCanonicalUrl,
       offers: {
         '@type': 'Offer',
-        url: canonicalUrl,
+        url: shareCanonicalUrl,
         priceCurrency: 'INR',
         price: price.toFixed(2),
         availability: Number(product.stock || 0) > 0
@@ -333,6 +338,7 @@ const getSocialPreview = async (req, res) => {
     res.set({
       'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
       'X-Robots-Tag': 'all',
+      'Access-Control-Allow-Origin': '*'
     });
 
     return res.status(200).type('html').send(`<!doctype html>
@@ -342,20 +348,21 @@ const getSocialPreview = async (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(`${ogTitle} | Yogkart`)}</title>
   <meta name="description" content="${escapeHtml(ogDescription)}">
-  <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+  <link rel="canonical" href="${escapeHtml(shareCanonicalUrl)}">
 
   <!-- Open Graph / WhatsApp / Facebook / Telegram -->
   <meta property="og:site_name" content="Yogkart">
   <meta property="og:type" content="product">
   <meta property="og:title" content="${escapeHtml(ogTitle)}">
   <meta property="og:description" content="${escapeHtml(ogDescription)}">
-  <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+  <meta property="og:url" content="${escapeHtml(shareCanonicalUrl)}">
   <meta property="og:image" content="${escapeHtml(shareImageUrl)}">
   <meta property="og:image:secure_url" content="${escapeHtml(shareImageUrl)}">
   <meta property="og:image:alt" content="${escapeHtml(product.name)}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image" content="${escapeHtml(rawProductImg)}">
 
   <!-- Product Metadata -->
   <meta property="product:price:amount" content="${escapeHtml(price.toFixed(2))}">
@@ -374,8 +381,6 @@ const getSocialPreview = async (req, res) => {
   <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}">
   <meta name="twitter:image:alt" content="${escapeHtml(product.name)}">
 
-  <!-- Instant Browser Redirect to Full Interactive App -->
-  <meta http-equiv="refresh" content="0;url=${escapeHtml(productUrl)}">
   <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>
 </head>
 <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; color: #111827; padding: 24px; text-align: center;">
@@ -386,7 +391,12 @@ const getSocialPreview = async (req, res) => {
     <p style="font-size: 14px; color: #4b5563; line-height: 1.5; margin-bottom: 24px;">${escapeHtml(ogDescription)}</p>
     <a href="${escapeHtml(productUrl)}" style="display: inline-block; background: #0b4d2c; color: #ffffff; font-weight: 700; font-size: 15px; padding: 14px 32px; border-radius: 14px; text-decoration: none; box-shadow: 0 4px 12px rgba(11,77,44,0.3);">Buy Now on Yogkart</a>
   </main>
-  <script>window.location.replace(${JSON.stringify(productUrl)});</script>
+  <script>
+    // Real human visitors are seamlessly redirected to the full app
+    if (typeof window !== 'undefined' && window.location) {
+      window.location.replace(${JSON.stringify(productUrl)});
+    }
+  </script>
 </body>
 </html>`);
   } catch (error) {
