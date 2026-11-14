@@ -61,10 +61,10 @@ const getPayments = async (req, res) => {
          o.payment_status,
          o.status         AS order_status,
          o.created_at,
-         u.name           AS user_name,
-         u.email          AS user_email
+         COALESCE(u.name, o.address_name, 'Guest Customer') AS user_name,
+         COALESCE(u.email, o.customer_email, '')            AS user_email
        FROM orders o
-       JOIN users u ON u.id = o.user_id
+       LEFT JOIN users u ON u.id = o.user_id
        ${where}
        ORDER BY o.created_at DESC
        LIMIT $${idx} OFFSET $${idx + 1}`,

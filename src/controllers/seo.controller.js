@@ -7,44 +7,135 @@ const escapeXml = (value) => String(value || '')
   .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /**
- * Master Sitemap Index XML
+ * Master Sitemap XML for Yogkart E-Commerce
  */
 const sitemapIndex = async (_req, res) => {
   try {
-    const { rows: locales } = await db.query(`SELECT code FROM seo_locales WHERE is_active = TRUE ORDER BY code ASC`);
+    const { rows: products } = await db.query(
+      `SELECT name, slug, thumbnail, images, updated_at, created_at 
+       FROM products 
+       WHERE is_active = TRUE 
+       ORDER BY id ASC`
+    );
 
-    let sitemapsXml = '';
-    locales.forEach(l => {
-      sitemapsXml += `
-  <sitemap>
-    <loc>${SITE_URL}/sitemap-${l.code.toLowerCase()}.xml</loc>
-    <lastmod>${new Date().toISOString()}</lastmod>
-  </sitemap>`;
-    });
+    let blogs = [];
+    try {
+      const blogsRes = await db.query(
+        `SELECT title, slug, featured_image, updated_at, created_at 
+         FROM blogs 
+         WHERE is_published = TRUE 
+         ORDER BY updated_at DESC`
+      );
+      blogs = blogsRes.rows;
+    } catch (_) {}
 
-    sitemapsXml += `
-  <sitemap>
-    <loc>${SITE_URL}/sitemap-blogs.xml</loc>
+    const corePages = [
+      { path: '', priority: '1.0', changefreq: 'daily' },
+      { path: '/products', priority: '0.9', changefreq: 'daily' },
+      { path: '/shop-by-concern', priority: '0.8', changefreq: 'weekly' },
+      { path: '/about', priority: '0.6', changefreq: 'monthly' },
+      { path: '/contact', priority: '0.6', changefreq: 'monthly' },
+      { path: '/privacy-policy', priority: '0.5', changefreq: 'monthly' },
+      { path: '/terms-and-conditions', priority: '0.5', changefreq: 'monthly' },
+      { path: '/refund-cancellation-policy', priority: '0.5', changefreq: 'monthly' },
+      { path: '/shipping-delivery-policy', priority: '0.5', changefreq: 'monthly' },
+      { path: '/return-replacement-policy', priority: '0.5', changefreq: 'monthly' },
+      { path: '/company-verification-documents', priority: '0.5', changefreq: 'monthly' },
+      { path: '/disclaimer', priority: '0.4', changefreq: 'monthly' },
+      { path: '/cookie-policy', priority: '0.4', changefreq: 'monthly' },
+    ];
+
+    let urlsXml = '';
+
+    // 1. Core Pages
+    for (const page of corePages) {
+      urlsXml += `
+  <url>
+    <loc>${SITE_URL}${page.path}</loc>
     <lastmod>${new Date().toISOString()}</lastmod>
-  </sitemap>
-  <sitemap>
-    <loc>${SITE_URL}/image-sitemap.xml</loc>
+    <changefreq>${page.changefreq}</changefreq>
+    <priority>${page.priority}</priority>
+  </url>`;
+    }
+
+    // 2. High-Intent Categories
+    const keyCategories = [
+      'hair-care', 'body-care', 'skin-care', 'oral-teeth-care', 'eye-care',
+      'eco-collection', 'neem-wood-products', 'wooden-combs', 'home-healthcare-essentials',
+      'pain-relief-support', 'fitness-wellness', 'wellness-sleep', 'beauty-tools', 'herbal-natural',
+      'spiritual-meditation-accessories'
+    ];
+    for (const cat of keyCategories) {
+      urlsXml += `
+  <url>
+    <loc>${SITE_URL}/products?category=${cat}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+    }
+
+    // 3. Active Products with Images
+    for (const p of products) {
+      const lastMod = p.updated_at || p.created_at || new Date();
+      let imageXml = '';
+      const img = p.thumbnail || (Array.isArray(p.images) && p.images[0]) || '';
+      if (img) {
+        const fullImgUrl = img.startsWith('http') ? img : `https://images.yogkart.com/${img.replace(/^\//, '')}`;
+        imageXml = `
+    <image:image>
+      <image:loc>${escapeXml(fullImgUrl)}</image:loc>
+      <image:title>${escapeXml(p.name)}</image:title>
+    </image:image>`;
+      }
+      urlsXml += `
+  <url>
+    <loc>${SITE_URL}/p/${escapeXml(p.slug)}</loc>
+    <lastmod>${new Date(lastMod).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>${imageXml}
+  </url>`;
+    }
+
+    // 4. Published Blogs
+    if (blogs.length > 0) {
+      urlsXml += `
+  <url>
+    <loc>${SITE_URL}/blog</loc>
     <lastmod>${new Date().toISOString()}</lastmod>
-  </sitemap>
-  <sitemap>
-    <loc>${SITE_URL}/video-sitemap.xml</loc>
-    <lastmod>${new Date().toISOString()}</lastmod>
-  </sitemap>`;
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+
+      for (const b of blogs) {
+        const lastMod = b.updated_at || b.created_at || new Date();
+        let imgXml = '';
+        if (b.featured_image) {
+          imgXml = `
+    <image:image>
+      <image:loc>${escapeXml(b.featured_image)}</image:loc>
+      <image:title>${escapeXml(b.title || 'Yogkart Wellness Guide')}</image:title>
+    </image:image>`;
+        }
+        urlsXml += `
+  <url>
+    <loc>${SITE_URL}/blog/${escapeXml(b.slug)}</loc>
+    <lastmod>${new Date(lastMod).toISOString()}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>${imgXml}
+  </url>`;
+      }
+    }
 
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>
-<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemapsXml}
-</sitemapindex>`
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${urlsXml}
+</urlset>`
     );
   } catch (err) {
-    console.error('sitemapIndex error:', err);
-    res.status(500).type('text/plain').send('Could not generate sitemap index');
+    console.error('sitemap error:', err);
+    res.status(500).type('text/plain').send('Could not generate sitemap');
   }
 };
 
@@ -91,75 +182,7 @@ ${urlsXml}
  * Per-Locale XML Sitemap (e.g. /sitemap-en-in.xml, /sitemap-en-us.xml)
  */
 const localeSitemap = async (req, res) => {
-  try {
-    const localeCode = (req.params.locale || 'en-in').toLowerCase();
-
-    const { rows: courses } = await db.query(`SELECT slug, updated_at FROM courses WHERE is_active = TRUE LIMIT 100`);
-    const { rows: products } = await db.query(`SELECT slug, updated_at FROM products WHERE is_active = TRUE LIMIT 100`);
-    const { rows: blogs } = await db.query(`SELECT slug, updated_at, created_at FROM blogs WHERE is_published = TRUE LIMIT 100`);
-
-    const basePages = ['/', '/courses', '/find-teachers', '/pricing', '/fitness-centers', '/products', '/blog', '/verify-certificate'];
-
-    let urlsXml = '';
-
-    for (const page of basePages) {
-      const loc = `${SITE_URL}/${localeCode}${page === '/' ? '' : page}`;
-      const hreflangs = generateHreflangs(page);
-      const hreflangXml = hreflangs
-        .map(h => `<xhtml:link rel="${h.rel}" hreflang="${h.hreflang}" href="${escapeXml(h.href)}"/>`)
-        .join('\n    ');
-
-      urlsXml += `
-  <url>
-    <loc>${escapeXml(loc)}</loc>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-    ${hreflangXml}
-  </url>`;
-    }
-
-    courses.forEach(c => {
-      urlsXml += `
-  <url>
-    <loc>${escapeXml(`${SITE_URL}/${localeCode}/courses/${c.slug}`)}</loc>
-    <lastmod>${new Date(c.updated_at).toISOString()}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-    });
-
-    products.forEach(p => {
-      urlsXml += `
-  <url>
-    <loc>${escapeXml(`${SITE_URL}/${localeCode}/products/${p.slug}`)}</loc>
-    <lastmod>${new Date(p.updated_at).toISOString()}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
-    });
-
-    blogs.forEach(b => {
-      const lastMod = b.updated_at || b.created_at || new Date();
-      urlsXml += `
-  <url>
-    <loc>${escapeXml(`${SITE_URL}/${localeCode}/blog/${b.slug}`)}</loc>
-    <lastmod>${new Date(lastMod).toISOString()}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-    });
-
-    res.type('application/xml').send(
-      `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
-${urlsXml}
-</urlset>`
-    );
-  } catch (err) {
-    console.error('localeSitemap error:', err);
-    res.status(500).type('text/plain').send('Could not generate locale sitemap');
-  }
+  return sitemapIndex(req, res);
 };
 
 /**
@@ -173,14 +196,15 @@ const imageSitemap = async (_req, res) => {
 
     let imagesXml = '';
     for (const p of products) {
-      const loc = `${SITE_URL}/products/${p.slug}`;
+      const loc = `${SITE_URL}/p/${p.slug}`;
       const img = p.thumbnail || (p.images && p.images[0]) || '';
       if (img) {
+        const fullImgUrl = img.startsWith('http') ? img : `https://images.yogkart.com/${img.replace(/^\//, '')}`;
         imagesXml += `
   <url>
     <loc>${escapeXml(loc)}</loc>
     <image:image>
-      <image:loc>${escapeXml(img)}</image:loc>
+      <image:loc>${escapeXml(fullImgUrl)}</image:loc>
       <image:title>${escapeXml(p.name)}</image:title>
     </image:image>
   </url>`;
@@ -205,28 +229,10 @@ ${imagesXml}
  */
 const videoSitemap = async (_req, res) => {
   try {
-    const { rows: courses } = await db.query(`SELECT title, description, slug, updated_at FROM courses WHERE is_active = TRUE LIMIT 50`);
-
-    let videosXml = '';
-    for (const c of courses) {
-      const loc = `${SITE_URL}/courses/${c.slug}`;
-      videosXml += `
-  <url>
-    <loc>${escapeXml(loc)}</loc>
-    <video:video>
-      <video:thumbnail_loc>${SITE_URL}/assets/images/course-preview.jpg</video:thumbnail_loc>
-      <video:title>${escapeXml(c.title)}</video:title>
-      <video:description>${escapeXml(c.description || c.title)}</video:description>
-      <video:publication_date>${new Date(c.updated_at).toISOString()}</video:publication_date>
-    </video:video>
-  </url>`;
-    }
-
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
-${videosXml}
 </urlset>`
     );
   } catch (err) {

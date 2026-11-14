@@ -65,9 +65,9 @@ const getOrders = async (req, res) => {
       params.push(to_date);
     }
     if (search) {
-      // orders.id is VARCHAR(20), users.name/email are text — all safe for ILIKE
+      // orders.id is VARCHAR(20), users/address fields safe for ILIKE
       conditions.push(
-        `(LOWER(o.id) LIKE LOWER($${idx}) OR u.name ILIKE $${idx} OR u.email ILIKE $${idx})`
+        `(LOWER(o.id) LIKE LOWER($${idx}) OR COALESCE(u.name, o.address_name) ILIKE $${idx} OR COALESCE(u.email, o.customer_email) ILIKE $${idx} OR o.address_phone ILIKE $${idx})`
       );
       params.push(`%${search}%`);
       idx++;
@@ -75,9 +75,9 @@ const getOrders = async (req, res) => {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Count query
+    // Count query (LEFT JOIN to include guest orders where user_id IS NULL)
     const countRes = await query(
-      `SELECT COUNT(*) FROM orders o JOIN users u ON u.id = o.user_id ${where}`,
+      `SELECT COUNT(*) FROM orders o LEFT JOIN users u ON u.id = o.user_id ${where}`,
       params
     );
     const total = parseInt(countRes.rows[0].count);
@@ -100,12 +100,12 @@ const getOrders = async (req, res) => {
          o.notes,
          o.created_at,
          o.updated_at,
-         u.name  AS user_name,
-         u.email AS user_email,
-         u.phone AS user_phone,
+         COALESCE(u.name, o.address_name, 'Guest Customer') AS user_name,
+         COALESCE(u.email, o.customer_email, '')            AS user_email,
+         COALESCE(u.phone, o.address_phone, '')            AS user_phone,
          (SELECT COUNT(*)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count
        FROM orders o
-       JOIN users u ON u.id = o.user_id
+       LEFT JOIN users u ON u.id = o.user_id
        ${where}
        ORDER BY o.created_at DESC
        LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -156,11 +156,11 @@ const getOrder = async (req, res) => {
     const orderRes = await query(
       `SELECT
          o.*,
-         u.name  AS user_name,
-         u.email AS user_email,
-         u.phone AS user_phone
+         COALESCE(u.name, o.address_name, 'Guest Customer') AS user_name,
+         COALESCE(u.email, o.customer_email, '')            AS user_email,
+         COALESCE(u.phone, o.address_phone, '')            AS user_phone
        FROM orders o
-       JOIN users u ON u.id = o.user_id
+       LEFT JOIN users u ON u.id = o.user_id
        WHERE o.id = $1`,
       [req.params.id]
     );

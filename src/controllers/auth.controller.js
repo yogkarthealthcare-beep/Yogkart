@@ -484,10 +484,105 @@ const socialLogin = async (req, res) => {
 // Yeh purane flow ke liye rakha hai
 const register = signupInit;
 
+// ── CHECKOUT EMAIL OTP & GUEST LOGIN ────────────────────────
+const checkoutSendOtp = async (req, res) => {
+  try {
+    const { email, name = 'Customer' } = req.body;
+    if (!email) return badRequest(res, 'Email address is required');
+
+    const emailClean = email.toLowerCase().trim();
+    const otp = generateOtp();
+    await saveOtp(emailClean, otp);
+
+    sendEmail({
+      type: 'otp',
+      to: emailClean,
+      data: { name: name.trim() || 'Valued Customer', otp }
+    }).catch(err => console.error('checkoutSendOtp email error:', err.message));
+
+    return success(res, null, 'OTP sent to your email. Please verify to continue.');
+  } catch (err) {
+    console.error('checkoutSendOtp error:', err.message);
+    return error(res, 'Failed to send OTP to email');
+  }
+};
+
+const checkoutVerifyOtp = async (req, res) => {
+  try {
+    const { email, otp, name = 'Customer', phone = '' } = req.body;
+    if (!email || !otp) return badRequest(res, 'Email and OTP are required');
+
+    const emailClean = email.toLowerCase().trim();
+    const otpRes = await verifyOtp(emailClean, String(otp).trim());
+    if (!otpRes.valid) return badRequest(res, otpRes.reason || 'Invalid or expired OTP');
+
+    // 1. Check if user already exists
+    const exists = await query('SELECT * FROM users WHERE email = $1', [emailClean]);
+    let user;
+
+    if (exists.rows.length > 0) {
+      user = exists.rows[0];
+      if (user.is_active === false) {
+        await query('UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1', [user.id]);
+        user.is_active = true;
+      }
+      // Update phone or name if user didn't have it
+      if ((!user.phone && phone) || (!user.name && name)) {
+        await query(
+          'UPDATE users SET phone = COALESCE(phone, $1), name = COALESCE(NULLIF(name, \'\'), $2), updated_at = NOW() WHERE id = $3',
+          [phone.trim() || null, name.trim() || null, user.id]
+        );
+      }
+    } else {
+      // 2. Create new user account with unique verified email
+      const crypto = require('crypto');
+      const autoPassword = `Yk@${crypto.randomBytes(4).toString('hex')}#${Date.now().toString(36)}`;
+      const passwordHash = await bcrypt.hash(autoPassword, BCRYPT_ROUNDS);
+
+      const newUser = await query(
+        `INSERT INTO users (name, email, phone, password, role, is_active, is_verified, email_verified)
+         VALUES ($1, $2, $3, $4, 'customer', TRUE, TRUE, TRUE)
+         RETURNING *`,
+        [name.trim() || 'Customer', emailClean, phone.trim() || null, passwordHash]
+      );
+      user = newUser.rows[0];
+    }
+
+    // 3. Link any previous guest orders matching this email or phone
+    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+    if (cleanPhone) {
+      await query(
+        `UPDATE orders SET user_id = $1 WHERE user_id IS NULL AND (customer_email = $2 OR address_phone ILIKE $3)`,
+        [user.id, emailClean, `%${cleanPhone}%`]
+      ).catch(() => {});
+    } else {
+      await query(
+        `UPDATE orders SET user_id = $1 WHERE user_id IS NULL AND customer_email = $2`,
+        [user.id, emailClean]
+      ).catch(() => {});
+    }
+
+    // 4. Issue JWT Access & Refresh Tokens
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    await saveRefreshToken(user.id, refreshToken);
+
+    return success(res, {
+      user: userShape(user),
+      accessToken,
+      refreshToken
+    }, 'Email verified successfully. You are logged in.');
+  } catch (err) {
+    console.error('checkoutVerifyOtp error:', err.message);
+    return error(res, 'OTP verification failed');
+  }
+};
+
 module.exports = {
   register, signupInit, signupVerify, resendOtp,
   login, refresh, logout, logoutAll,
   me, updateMe, changePassword,
   sendOtp, verifyOtpHandler, resetPassword,
   socialLogin,
+  checkoutSendOtp, checkoutVerifyOtp,
 };

@@ -90,4 +90,14 @@ router.post('/reset-password', [
   body('newPassword').isLength({ min: 6 }).withMessage('Min 6 characters'),
 ], validate, otpCtrl.resetPassword);
 
+// ── Checkout Email OTP ────────────────────────────────────
+router.post('/checkout-send-otp', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+], validate, ctrl.checkoutSendOtp);
+
+router.post('/checkout-verify-otp', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('6-digit OTP required'),
+], validate, ctrl.checkoutVerifyOtp);
+
 module.exports = router;
