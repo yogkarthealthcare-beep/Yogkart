@@ -34,7 +34,7 @@ exports.generateInvoicePdf = (order, items = []) => {
         .fontSize(9)
         .font('Helvetica')
         .text('Yogkart Healthcare Private Limited', 40, 68)
-        .text('Email: support@yogkart.in | Web: www.yogkart.in', 40, 80);
+        .text('Email: support@yogkart.com | Web: www.yogkart.com', 40, 80);
 
       // Invoice Title Badge
       doc

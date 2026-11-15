@@ -245,16 +245,22 @@ const downloadInvoice = async (req, res) => {
     const { id } = req.params;
     let order;
 
-    if (req.user.role === 'admin') {
+    if (req.user && req.user.role === 'admin') {
       const resOrder = await query(
-        `SELECT o.*, u.name as user_name, u.email as user_email, u.phone as user_phone,
-          json_agg(json_build_object(
-            'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
-            'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
-            'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
-          )) AS items
+        `SELECT o.*,
+          COALESCE(u.name, o.address_name, 'Customer') AS user_name,
+          COALESCE(u.email, o.customer_email, '')       AS user_email,
+          COALESCE(u.phone, o.address_phone, '')       AS user_phone,
+          COALESCE(
+            json_agg(json_build_object(
+              'id', oi.id, 'product_id', oi.product_id, 'name', oi.name,
+              'thumbnail', oi.thumbnail, 'pack_size', oi.pack_size,
+              'quantity', oi.quantity, 'price', oi.price, 'total', oi.total
+            )) FILTER (WHERE oi.id IS NOT NULL),
+            '[]'::json
+          ) AS items
          FROM orders o
-         JOIN users u ON o.user_id = u.id
+         LEFT JOIN users u ON o.user_id = u.id
          LEFT JOIN order_items oi ON oi.order_id = o.id
          WHERE o.id = $1
          GROUP BY o.id, u.id`,
@@ -262,7 +268,8 @@ const downloadInvoice = async (req, res) => {
       );
       order = resOrder.rows[0];
     } else {
-      order = await getOrderById(id, req.user.id);
+      const userId = req.user ? req.user.id : null;
+      order = await getOrderById(id, userId);
     }
 
     if (!order) return notFound(res, 'Order not found');
