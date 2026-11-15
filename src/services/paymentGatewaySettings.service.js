@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS payment_gateway_settings (
     CHECK (environment IN ('sandbox', 'production')),
   client_id_encrypted TEXT,
   secret_key_encrypted TEXT,
+  sandbox_client_id_encrypted TEXT,
+  sandbox_secret_key_encrypted TEXT,
+  production_client_id_encrypted TEXT,
+  production_secret_key_encrypted TEXT,
   callback_url TEXT,
   return_url TEXT,
   webhook_url TEXT,
@@ -39,6 +43,12 @@ CREATE TABLE IF NOT EXISTS payment_gateway_settings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE payment_gateway_settings
+  ADD COLUMN IF NOT EXISTS sandbox_client_id_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS sandbox_secret_key_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS production_client_id_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS production_secret_key_encrypted TEXT;
 
 ALTER TABLE payment_gateway_settings
   DROP CONSTRAINT IF EXISTS payment_gateway_name_supported;
@@ -146,22 +156,46 @@ const envSeed = (gateway) => {
 
 const ensurePaymentGatewaySchema = async () => {
   await query(SCHEMA_SQL);
+  await query(`
+    ALTER TABLE payment_gateway_settings
+      ADD COLUMN IF NOT EXISTS sandbox_client_id_encrypted TEXT,
+      ADD COLUMN IF NOT EXISTS sandbox_secret_key_encrypted TEXT,
+      ADD COLUMN IF NOT EXISTS production_client_id_encrypted TEXT,
+      ADD COLUMN IF NOT EXISTS production_secret_key_encrypted TEXT;
+
+    UPDATE payment_gateway_settings
+    SET
+      production_client_id_encrypted = COALESCE(production_client_id_encrypted, CASE WHEN environment = 'production' THEN client_id_encrypted END),
+      production_secret_key_encrypted = COALESCE(production_secret_key_encrypted, CASE WHEN environment = 'production' THEN secret_key_encrypted END),
+      sandbox_client_id_encrypted = COALESCE(sandbox_client_id_encrypted, CASE WHEN environment = 'sandbox' THEN client_id_encrypted END),
+      sandbox_secret_key_encrypted = COALESCE(sandbox_secret_key_encrypted, CASE WHEN environment = 'sandbox' THEN secret_key_encrypted END);
+  `);
+
   for (const gateway of Object.keys(GATEWAYS)) {
     const seed = envSeed(gateway);
+    const encClient = isUsableValue(seed.clientId) ? encryptCredential(seed.clientId) : null;
+    const encSecret = isUsableValue(seed.secretKey) ? encryptCredential(seed.secretKey) : null;
+    const isProd = seed.environment === 'production';
+
     const inserted = await query(
       `INSERT INTO payment_gateway_settings (
         gateway_name, is_enabled, environment, client_id_encrypted,
-        secret_key_encrypted, callback_url, return_url, webhook_url,
-        additional_config
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        secret_key_encrypted, sandbox_client_id_encrypted, sandbox_secret_key_encrypted,
+        production_client_id_encrypted, production_secret_key_encrypted,
+        callback_url, return_url, webhook_url, additional_config
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (gateway_name) DO NOTHING
       RETURNING id`,
       [
         gateway,
         seed.isEnabled,
         seed.environment,
-        isUsableValue(seed.clientId) ? encryptCredential(seed.clientId) : null,
-        isUsableValue(seed.secretKey) ? encryptCredential(seed.secretKey) : null,
+        encClient,
+        encSecret,
+        !isProd ? encClient : null,
+        !isProd ? encSecret : null,
+        isProd ? encClient : null,
+        isProd ? encSecret : null,
         seed.callbackUrl || null,
         seed.returnUrl || null,
         seed.webhookUrl || null,
@@ -180,6 +214,8 @@ const ensurePaymentGatewaySchema = async () => {
             'environment',
             'clientId',
             'secretKey',
+            'sandboxClientId',
+            'productionClientId',
             'callbackUrl',
             'returnUrl',
             'webhookUrl',
@@ -190,22 +226,41 @@ const ensurePaymentGatewaySchema = async () => {
   }
 };
 
-const mapRuntime = (row) => ({
-  id: row.id,
-  gatewayName: row.gateway_name,
-  displayName: GATEWAYS[row.gateway_name]?.displayName || row.gateway_name,
-  currency: GATEWAYS[row.gateway_name]?.currency,
-  isEnabled: row.is_enabled,
-  environment: row.environment,
-  clientId: safeDecrypt(row.client_id_encrypted),
-  secretKey: safeDecrypt(row.secret_key_encrypted),
-  callbackUrl: row.callback_url || '',
-  returnUrl: row.return_url || '',
-  webhookUrl: row.webhook_url || '',
-  additionalConfig: row.additional_config || {},
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+const mapRuntime = (row) => {
+  const sandboxClientId = safeDecrypt(row.sandbox_client_id_encrypted) || (row.environment === 'sandbox' ? safeDecrypt(row.client_id_encrypted) : '');
+  const sandboxSecretKey = safeDecrypt(row.sandbox_secret_key_encrypted) || (row.environment === 'sandbox' ? safeDecrypt(row.secret_key_encrypted) : '');
+  const productionClientId = safeDecrypt(row.production_client_id_encrypted) || (row.environment === 'production' ? safeDecrypt(row.client_id_encrypted) : '');
+  const productionSecretKey = safeDecrypt(row.production_secret_key_encrypted) || (row.environment === 'production' ? safeDecrypt(row.secret_key_encrypted) : '');
+
+  const activeClientId = row.environment === 'production'
+    ? (productionClientId || safeDecrypt(row.client_id_encrypted))
+    : (sandboxClientId || safeDecrypt(row.client_id_encrypted));
+
+  const activeSecretKey = row.environment === 'production'
+    ? (productionSecretKey || safeDecrypt(row.secret_key_encrypted))
+    : (sandboxSecretKey || safeDecrypt(row.secret_key_encrypted));
+
+  return {
+    id: row.id,
+    gatewayName: row.gateway_name,
+    displayName: GATEWAYS[row.gateway_name]?.displayName || row.gateway_name,
+    currency: GATEWAYS[row.gateway_name]?.currency,
+    isEnabled: row.is_enabled,
+    environment: row.environment,
+    clientId: activeClientId,
+    secretKey: activeSecretKey,
+    sandboxClientId,
+    sandboxSecretKey,
+    productionClientId,
+    productionSecretKey,
+    callbackUrl: row.callback_url || '',
+    returnUrl: row.return_url || '',
+    webhookUrl: row.webhook_url || '',
+    additionalConfig: row.additional_config || {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 const getGatewaySettings = async (name, { requireEnabled = false } = {}) => {
   const gateway = assertGateway(name);
@@ -225,7 +280,8 @@ const getGatewaySettings = async (name, { requireEnabled = false } = {}) => {
     throw error;
   }
   if (requireEnabled && (!settings.clientId || !settings.secretKey)) {
-    const error = new Error(`${settings.displayName} credentials are incomplete`);
+    const modeLabel = settings.environment === 'production' ? 'Production' : 'Testing (Sandbox)';
+    const error = new Error(`${settings.displayName} credentials are incomplete for ${modeLabel} mode`);
     error.status = 503;
     throw error;
   }
@@ -241,30 +297,46 @@ const getAdminGatewaySettings = async () => {
   return result.rows.map((row) => {
     const runtime = mapRuntime(row);
     const secret = runtime.secretKey;
+    const sandboxSecret = runtime.sandboxSecretKey;
+    const productionSecret = runtime.productionSecretKey;
+
     delete runtime.secretKey;
+    delete runtime.sandboxSecretKey;
+    delete runtime.productionSecretKey;
+
     return {
       ...runtime,
       secretConfigured: Boolean(secret),
       secretMasked: secret ? maskCredentialValue(secret) : '',
+      sandboxSecretConfigured: Boolean(sandboxSecret),
+      sandboxSecretMasked: sandboxSecret ? maskCredentialValue(sandboxSecret) : '',
+      productionSecretConfigured: Boolean(productionSecret),
+      productionSecretMasked: productionSecret ? maskCredentialValue(productionSecret) : '',
     };
   });
 };
 
 const getPublicGatewaySettings = async () => {
   const result = await query(
-    `SELECT gateway_name, environment, client_id_encrypted
+    `SELECT gateway_name, environment, client_id_encrypted, sandbox_client_id_encrypted, production_client_id_encrypted
      FROM payment_gateway_settings
      WHERE is_enabled = TRUE`
   );
-  return result.rows.map((row) => ({
-    gatewayName: row.gateway_name,
-    displayName: GATEWAYS[row.gateway_name]?.displayName,
-    currency: GATEWAYS[row.gateway_name]?.currency,
-    environment: row.environment,
-    clientId: ['razorpay', 'paypal'].includes(row.gateway_name)
-      ? safeDecrypt(row.client_id_encrypted)
-      : undefined,
-  }));
+  return result.rows.map((row) => {
+    let clientId;
+    if (['razorpay', 'paypal'].includes(row.gateway_name)) {
+      clientId = row.environment === 'production'
+        ? (safeDecrypt(row.production_client_id_encrypted) || safeDecrypt(row.client_id_encrypted))
+        : (safeDecrypt(row.sandbox_client_id_encrypted) || safeDecrypt(row.client_id_encrypted));
+    }
+    return {
+      gatewayName: row.gateway_name,
+      displayName: GATEWAYS[row.gateway_name]?.displayName,
+      currency: GATEWAYS[row.gateway_name]?.currency,
+      environment: row.environment,
+      clientId,
+    };
+  });
 };
 
 const isValidUrl = (value) => {
@@ -305,59 +377,94 @@ const updateGatewaySettings = async (name, payload, audit = {}) => {
       throw error;
     }
     const existing = mapRuntime(existingResult.rows[0]);
-    const fields = {
-      isEnabled: Boolean(payload.isEnabled),
-      environment,
-      clientId: String(payload.clientId ?? existing.clientId).trim(),
-      secretKey: String(payload.secretKey || existing.secretKey).trim(),
-      callbackUrl: String(payload.callbackUrl || '').trim(),
-      returnUrl: String(payload.returnUrl || '').trim(),
-      webhookUrl: String(payload.webhookUrl || '').trim(),
-      additionalConfig: payload.additionalConfig && typeof payload.additionalConfig === 'object'
-        ? payload.additionalConfig
-        : {},
-    };
-    if (fields.isEnabled && (!fields.clientId || !fields.secretKey)) {
-      const error = new Error('Client/Key ID and secret key are required before enabling a gateway');
+
+    // Sandbox credentials:
+    let sandboxClientId = payload.sandboxClientId !== undefined
+      ? String(payload.sandboxClientId).trim()
+      : (environment === 'sandbox' && payload.clientId !== undefined ? String(payload.clientId).trim() : existing.sandboxClientId);
+
+    let sandboxSecretKey = payload.sandboxSecretKey
+      ? String(payload.sandboxSecretKey).trim()
+      : (environment === 'sandbox' && payload.secretKey ? String(payload.secretKey).trim() : existing.sandboxSecretKey);
+
+    // Production credentials:
+    let productionClientId = payload.productionClientId !== undefined
+      ? String(payload.productionClientId).trim()
+      : (environment === 'production' && payload.clientId !== undefined ? String(payload.clientId).trim() : existing.productionClientId);
+
+    let productionSecretKey = payload.productionSecretKey
+      ? String(payload.productionSecretKey).trim()
+      : (environment === 'production' && payload.secretKey ? String(payload.secretKey).trim() : existing.productionSecretKey);
+
+    const isEnabled = Boolean(payload.isEnabled);
+
+    // Active credentials for current environment
+    const activeClientId = environment === 'production' ? productionClientId : sandboxClientId;
+    const activeSecretKey = environment === 'production' ? productionSecretKey : sandboxSecretKey;
+
+    if (isEnabled && (!activeClientId || !activeSecretKey)) {
+      const modeLabel = environment === 'production' ? 'Production (Live)' : 'Testing (Sandbox)';
+      const error = new Error(`Both Client/Key ID and Secret Key are required for ${modeLabel} mode before enabling this gateway.`);
       error.status = 400;
       throw error;
     }
 
-    const changedFields = Object.keys(fields).filter((field) => {
-      if (field === 'secretKey') return Boolean(payload.secretKey) && payload.secretKey !== existing.secretKey;
-      if (field === 'additionalConfig') {
-        return JSON.stringify(fields[field]) !== JSON.stringify(existing[field] || {});
-      }
-      return fields[field] !== existing[field];
-    });
+    const callbackUrl = String(payload.callbackUrl ?? existing.callbackUrl).trim();
+    const returnUrl = String(payload.returnUrl ?? existing.returnUrl).trim();
+    const webhookUrl = String(payload.webhookUrl ?? existing.webhookUrl).trim();
+    const additionalConfig = payload.additionalConfig && typeof payload.additionalConfig === 'object'
+      ? payload.additionalConfig
+      : existing.additionalConfig;
 
     const updatedResult = await client.query(
       `UPDATE payment_gateway_settings SET
-        is_enabled = $1, environment = $2, client_id_encrypted = $3,
-        secret_key_encrypted = $4, callback_url = $5, return_url = $6,
-        webhook_url = $7, additional_config = $8, updated_by = $9
-       WHERE gateway_name = $10
+        is_enabled = $1,
+        environment = $2,
+        client_id_encrypted = $3,
+        secret_key_encrypted = $4,
+        sandbox_client_id_encrypted = $5,
+        sandbox_secret_key_encrypted = $6,
+        production_client_id_encrypted = $7,
+        production_secret_key_encrypted = $8,
+        callback_url = $9,
+        return_url = $10,
+        webhook_url = $11,
+        additional_config = $12,
+        updated_by = $13
+       WHERE gateway_name = $14
        RETURNING *`,
       [
-        fields.isEnabled,
-        fields.environment,
-        fields.clientId ? encryptCredential(fields.clientId) : null,
-        fields.secretKey ? encryptCredential(fields.secretKey) : null,
-        fields.callbackUrl || null,
-        fields.returnUrl || null,
-        fields.webhookUrl || null,
-        JSON.stringify(fields.additionalConfig),
+        isEnabled,
+        environment,
+        activeClientId ? encryptCredential(activeClientId) : null,
+        activeSecretKey ? encryptCredential(activeSecretKey) : null,
+        sandboxClientId ? encryptCredential(sandboxClientId) : null,
+        sandboxSecretKey ? encryptCredential(sandboxSecretKey) : null,
+        productionClientId ? encryptCredential(productionClientId) : null,
+        productionSecretKey ? encryptCredential(productionSecretKey) : null,
+        callbackUrl || null,
+        returnUrl || null,
+        webhookUrl || null,
+        JSON.stringify(additionalConfig),
         audit.adminId || null,
         gateway,
       ]
     );
+
     await client.query(
       `INSERT INTO payment_gateway_audit_logs
         (gateway_name, action, changed_fields, admin_id, ip_address, user_agent)
        VALUES ($1, 'updated', $2, $3, $4, $5)`,
       [
         gateway,
-        JSON.stringify(changedFields),
+        JSON.stringify({
+          environment,
+          isEnabled,
+          hasSandboxClient: Boolean(sandboxClientId),
+          hasSandboxSecret: Boolean(sandboxSecretKey),
+          hasProductionClient: Boolean(productionClientId),
+          hasProductionSecret: Boolean(productionSecretKey),
+        }),
         audit.adminId || null,
         audit.ipAddress || null,
         audit.userAgent || null,
@@ -367,15 +474,81 @@ const updateGatewaySettings = async (name, payload, audit = {}) => {
 
     const runtime = mapRuntime(updatedResult.rows[0]);
     const secret = runtime.secretKey;
+    const sandboxSecret = runtime.sandboxSecretKey;
+    const productionSecret = runtime.productionSecretKey;
+
     delete runtime.secretKey;
+    delete runtime.sandboxSecretKey;
+    delete runtime.productionSecretKey;
+
     return {
       ...runtime,
       secretConfigured: Boolean(secret),
       secretMasked: secret ? maskCredentialValue(secret) : '',
+      sandboxSecretConfigured: Boolean(sandboxSecret),
+      sandboxSecretMasked: sandboxSecret ? maskCredentialValue(sandboxSecret) : '',
+      productionSecretConfigured: Boolean(productionSecret),
+      productionSecretMasked: productionSecret ? maskCredentialValue(productionSecret) : '',
     };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const bulkUpdateEnvironment = async (environment, audit = {}) => {
+  const env = String(environment || '').toLowerCase();
+  if (!['sandbox', 'production'].includes(env)) {
+    const error = new Error('Environment must be sandbox or production');
+    error.status = 400;
+    throw error;
+  }
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM payment_gateway_settings FOR UPDATE');
+    for (const row of existing.rows) {
+      const runtime = mapRuntime(row);
+      const activeClientId = env === 'production' ? runtime.productionClientId : runtime.sandboxClientId;
+      const activeSecretKey = env === 'production' ? runtime.productionSecretKey : runtime.sandboxSecretKey;
+
+      await client.query(
+        `UPDATE payment_gateway_settings SET
+          environment = $1,
+          client_id_encrypted = $2,
+          secret_key_encrypted = $3,
+          updated_by = $4
+         WHERE gateway_name = $5`,
+        [
+          env,
+          activeClientId ? encryptCredential(activeClientId) : row.client_id_encrypted,
+          activeSecretKey ? encryptCredential(activeSecretKey) : row.secret_key_encrypted,
+          audit.adminId || null,
+          row.gateway_name,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO payment_gateway_audit_logs
+          (gateway_name, action, changed_fields, admin_id, ip_address, user_agent)
+         VALUES ($1, 'bulk_environment_switch', $2, $3, $4, $5)`,
+        [
+          row.gateway_name,
+          JSON.stringify({ previous: row.environment, new: env }),
+          audit.adminId || null,
+          audit.ipAddress || null,
+          audit.userAgent || null,
+        ]
+      );
+    }
+    await client.query('COMMIT');
+    return await getAdminGatewaySettings();
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }
@@ -388,4 +561,5 @@ module.exports = {
   getAdminGatewaySettings,
   getPublicGatewaySettings,
   updateGatewaySettings,
+  bulkUpdateEnvironment,
 };

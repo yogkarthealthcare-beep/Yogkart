@@ -2,6 +2,7 @@ const { success, error, badRequest } = require('../utils/response');
 const {
   getAdminGatewaySettings,
   updateGatewaySettings,
+  bulkUpdateEnvironment,
 } = require('../services/paymentGatewaySettings.service');
 
 const list = async (_req, res) => {
@@ -28,4 +29,20 @@ const update = async (req, res) => {
   }
 };
 
-module.exports = { list, update };
+const bulkEnvironment = async (req, res) => {
+  try {
+    const gateways = await bulkUpdateEnvironment(req.body.environment, {
+      adminId: req.admin.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    const label = req.body.environment === 'production' ? 'Production (Live)' : 'Testing (Sandbox)';
+    return success(res, { gateways }, `All payment gateways switched to ${label} mode successfully`);
+  } catch (err) {
+    console.error('Bulk update environment error:', err.message);
+    if (err.status === 400) return badRequest(res, err.message);
+    return error(res, err.message || 'Failed to switch payment gateways environment', err.status || 500);
+  }
+};
+
+module.exports = { list, update, bulkEnvironment };

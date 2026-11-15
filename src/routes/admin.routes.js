@@ -137,6 +137,7 @@ router.post('/refunds',                       paymentsCtrl.initiateRefund);
 
 // Payment gateway credentials are restricted to super admins.
 router.get('/settings/payment-gateways', superAdminOnly, paymentGatewaysCtrl.list);
+router.post('/settings/payment-gateways/bulk-environment', superAdminOnly, paymentGatewaysCtrl.bulkEnvironment);
 router.put('/settings/payment-gateways/:gateway', superAdminOnly, paymentGatewaysCtrl.update);
 
 // Database management
