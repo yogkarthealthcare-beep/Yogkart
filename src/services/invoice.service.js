@@ -18,9 +18,9 @@ exports.generateInvoicePdf = (order, items = []) => {
 
       // ── Color Palette ───────────────────────────────────────
       const primaryColor = '#065f46';   // Emerald-800
-      const secondaryColor = '#000000'; // Pure Black
-      const darkColor = '#111827';      // Gray-900
-      const textGray = '#1f2937';       // Dark charcoal text
+      const secondaryColor = '#1e293b'; // Slate-800
+      const darkColor = '#0f172a';      // Slate-900
+      const textGray = '#475569';       // Slate-600
 
       // ── Header / Brand Banner ──────────────────────────────
       doc
@@ -32,40 +32,37 @@ exports.generateInvoicePdf = (order, items = []) => {
       doc
         .fillColor(textGray)
         .fontSize(9)
-        .font('Helvetica-Bold')
-        .text('Yogkart Healthcare Private Limited', 40, 68)
         .font('Helvetica')
+        .text('Yogkart Healthcare Private Limited', 40, 68)
         .text('Email: support@yogkart.com | Web: www.yogkart.com', 40, 80);
 
       // Invoice Title Badge
       doc
-        .fillColor(secondaryColor)
-        .fontSize(20)
+        .fillColor(primaryColor)
+        .fontSize(18)
         .font('Helvetica-Bold')
         .text('TAX INVOICE', 400, 40, { align: 'right' });
 
       doc
-        .fillColor(darkColor)
+        .fillColor(secondaryColor)
         .fontSize(10)
-        .font('Helvetica-Bold')
-        .text(`Invoice No: INV-${order.id}`, 400, 65, { align: 'right' })
         .font('Helvetica')
+        .text(`Invoice No: INV-${order.id}`, 400, 65, { align: 'right' })
         .text(`Order Date: ${new Date(order.created_at).toLocaleDateString('en-IN')}`, 400, 80, { align: 'right' })
         .text(`Payment: ${(order.payment_method || 'ONLINE').toUpperCase()}`, 400, 95, { align: 'right' })
-        .font('Helvetica-Bold')
         .text(`Status: ${(order.payment_status || 'PAID').toUpperCase()}`, 400, 110, { align: 'right' });
 
-      // Line separator (Bold & Dark)
+      // Line separator
       doc
         .moveTo(40, 130)
         .lineTo(555, 130)
-        .strokeColor('#000000')
-        .lineWidth(2)
+        .strokeColor('#cbd5e1')
+        .lineWidth(1)
         .stroke();
 
       // ── Customer / Shipping Address ─────────────────────────
       doc
-        .fillColor(secondaryColor)
+        .fillColor(primaryColor)
         .fontSize(11)
         .font('Helvetica-Bold')
         .text('Billed & Shipped To:', 40, 145);
@@ -84,20 +81,19 @@ exports.generateInvoicePdf = (order, items = []) => {
         .fontSize(10)
         .font('Helvetica-Bold')
         .text(customerName, 40, 160)
-        .font('Helvetica-Bold')
-        .fillColor(darkColor)
-        .text(`Phone: ${customerPhone}`, 40, 175)
         .font('Helvetica')
+        .fillColor(textGray)
+        .text(`Phone: ${customerPhone}`, 40, 175)
         .text(addressStr || 'Address Not Provided', 40, 190, { width: 300 });
 
       // ── Items Table Header ──────────────────────────────────
       let tableTop = 230;
       doc
         .rect(40, tableTop, 515, 24)
-        .fill('#111827');
+        .fill('#f1f5f9');
 
       doc
-        .fillColor('#ffffff')
+        .fillColor(primaryColor)
         .fontSize(9)
         .font('Helvetica-Bold')
         .text('SR', 50, tableTop + 7)
@@ -118,12 +114,10 @@ exports.generateInvoicePdf = (order, items = []) => {
         doc
           .fillColor(secondaryColor)
           .fontSize(9)
-          .font('Helvetica-Bold')
+          .font('Helvetica')
           .text(sr.toString(), 50, y)
           .text(item.name || 'Product Item', 80, y, { width: 190 })
-          .font('Helvetica')
           .text(item.pack_size || item.attribute_value || '-', 280, y)
-          .font('Helvetica-Bold')
           .text(item.quantity.toString(), 370, y)
           .text(itemPrice.toFixed(2), 420, y)
           .text(itemTotal.toFixed(2), 490, y);
@@ -132,7 +126,7 @@ exports.generateInvoicePdf = (order, items = []) => {
         doc
           .moveTo(40, y + 16)
           .lineTo(555, y + 16)
-          .strokeColor('#e2e8f0')
+          .strokeColor('#f1f5f9')
           .lineWidth(0.8)
           .stroke();
 
@@ -145,12 +139,12 @@ exports.generateInvoicePdf = (order, items = []) => {
         }
       }
 
-      // Line separator below items (Bold & Dark)
+      // Line separator below items
       doc
         .moveTo(40, y + 5)
         .lineTo(555, y + 5)
-        .strokeColor('#000000')
-        .lineWidth(2)
+        .strokeColor('#cbd5e1')
+        .lineWidth(1)
         .stroke();
 
       // ── Totals Summary ──────────────────────────────────────
