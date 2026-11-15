@@ -268,8 +268,7 @@ const downloadInvoice = async (req, res) => {
       );
       order = resOrder.rows[0];
     } else {
-      const userId = req.user ? req.user.id : null;
-      order = await getOrderById(id, userId);
+      order = await getOrderById(id);
     }
 
     if (!order) return notFound(res, 'Order not found');
@@ -351,10 +350,11 @@ const getOrders = async (req, res) => {
 // ── GET /api/orders/:id ────────────────────────────────
 const getOrder = async (req, res) => {
   try {
-    const order = await getOrderById(req.params.id, req.user.id);
+    const order = await getOrderById(req.params.id);
     if (!order) return notFound(res, 'Order not found');
     return success(res, { order });
   } catch (err) {
+    console.error('getOrder error:', err);
     return error(res, 'Failed to fetch order');
   }
 };
