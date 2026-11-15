@@ -263,6 +263,24 @@ router.post('/payu/create-payment', async (req, res) => {
       return res.status(400).json({ success: false, message: 'A valid INR amount is required' });
     }
 
+    const actionUrl = payuBaseUrl(settings.environment);
+
+    // If in sandbox mode, probe test.payu.in with a 3.5s timeout so user browser does not hang for 2 mins
+    if (settings.environment === 'sandbox') {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        await fetch(actionUrl, { method: 'HEAD', signal: controller.signal });
+        clearTimeout(timeout);
+      } catch (probeErr) {
+        console.warn('PayU sandbox server probe failed:', probeErr.message);
+        return res.status(503).json({
+          success: false,
+          message: 'PayU Sandbox server (test.payu.in) is currently down or timing out (504). Please switch PayU to Production mode in Admin Panel or choose Razorpay / Cashfree.',
+        });
+      }
+    }
+
     const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
     const frontendUrl = String(settings.returnUrl || process.env.FRONTEND_URL || 'https://yogkart.com').replace(/\/$/, '');
     const txnid = String(receipt || `YKPU-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
@@ -291,7 +309,7 @@ router.post('/payu/create-payment', async (req, res) => {
       success: true,
       orderId: txnid,
       gateway: 'payu',
-      action: payuBaseUrl(settings.environment),
+      action: actionUrl,
       method: 'POST',
       fields,
       environment: settings.environment,
