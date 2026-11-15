@@ -15,15 +15,17 @@ const { success, error, paginated } = require('../utils/response');
 // ── GET /api/admin/inventory ───────────────────────────
 const getInventory = async (req, res) => {
   try {
-    const { page = 1, limit = 20, search, category, stock_status } = req.query;
+    const { page = 1, limit = 20, search, category, stock_status, status } = req.query;
 
     const conditions = [];
     const params = [];
     let idx = 1;
 
-    // Only active (published) products should appear in inventory list
-    if (req.query.include_inactive !== 'true') {
+    // Filter by status if specified, otherwise include ALL products (active + inactive) in inventory
+    if (status === 'active' || req.query.only_active === 'true') {
       conditions.push('p.is_active = TRUE');
+    } else if (status === 'inactive') {
+      conditions.push('p.is_active = FALSE');
     }
 
     if (search) {
@@ -76,13 +78,19 @@ const getInventory = async (req, res) => {
 // Angular expects: res.data.count
 const getLowStock = async (req, res) => {
   try {
+    const { status } = req.query;
+    const conditions = ['p.stock <= 5', 'p.stock > 0'];
+    if (status === 'active') conditions.push('p.is_active = TRUE');
+    if (status === 'inactive') conditions.push('p.is_active = FALSE');
+    const where = `WHERE ${conditions.join(' AND ')}`;
+
     const result = await query(
       `SELECT
-         p.id, p.name, p.brand, p.thumbnail, p.stock, p.price,
+         p.id, p.name, p.brand, p.thumbnail, p.stock, p.price, p.is_active,
          c.name AS category_name
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
-       WHERE p.stock <= 5 AND p.stock > 0 AND p.is_active = TRUE
+       ${where}
        ORDER BY p.stock ASC`
     );
     return success(res, { products: result.rows, count: result.rows.length });
@@ -96,13 +104,19 @@ const getLowStock = async (req, res) => {
 // Angular expects: res.data.count
 const getOutOfStock = async (req, res) => {
   try {
+    const { status } = req.query;
+    const conditions = ['p.stock = 0'];
+    if (status === 'active') conditions.push('p.is_active = TRUE');
+    if (status === 'inactive') conditions.push('p.is_active = FALSE');
+    const where = `WHERE ${conditions.join(' AND ')}`;
+
     const result = await query(
       `SELECT
-         p.id, p.name, p.brand, p.thumbnail, p.stock, p.price,
+         p.id, p.name, p.brand, p.thumbnail, p.stock, p.price, p.is_active,
          c.name AS category_name
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
-       WHERE p.stock = 0 AND p.is_active = TRUE
+       ${where}
        ORDER BY p.name ASC`
     );
     return success(res, { products: result.rows, count: result.rows.length });
