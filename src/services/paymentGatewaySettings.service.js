@@ -396,7 +396,9 @@ const updateGatewaySettings = async (name, payload, audit = {}) => {
       ? String(payload.productionSecretKey).trim()
       : (environment === 'production' && payload.secretKey ? String(payload.secretKey).trim() : existing.productionSecretKey);
 
-    const isEnabled = Boolean(payload.isEnabled);
+    const isEnabled = payload.isEnabled !== undefined
+      ? Boolean(payload.isEnabled)
+      : existing.isEnabled;
 
     // Active credentials for current environment
     const activeClientId = environment === 'production' ? productionClientId : sandboxClientId;

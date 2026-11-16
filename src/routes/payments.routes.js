@@ -124,6 +124,7 @@ const payuResponseHash = ({
 
 router.get('/gateways', async (_req, res) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json({ success: true, data: { gateways: await getPublicGatewaySettings() } });
   } catch (err) {
     sendGatewayError(res, err, 'Could not load payment methods');
